@@ -6,7 +6,7 @@ Phase 4 — Core Implementation
 
 ## Next step
 
-User sets `Clerk:Authority` in `src/Gateway/appsettings.json`. Then decide step 4 (frontend for manual testing, hold expiry job, or my bookings + cancellation).
+Next: hold expiry job, then my bookings (FR-5) + cancellation (FR-14..16).
 
 ## Confirmed decisions
 
@@ -59,6 +59,7 @@ User sets `Clerk:Authority` in `src/Gateway/appsettings.json`. Then decide step 
 - Gateway: Minimal API, REST → gRPC via `AddGrpcClient`. gRPC errors mapped to ProblemDetails in `GrpcExceptionHandler`. Gateway tests use a fake Bookings client.
 - Gateway auth: JWT bearer with Clerk as authority, no audience validation, `MapInboundClaims = false`. Booking endpoint requires `email` claim.
 - Rate limiting: global fixed window per client IP (default 100/min). Forwarded headers needed behind reverse proxy (Phase 7).
+- Frontend: Vite + React + TypeScript, `@clerk/react` v6. Vite dev server proxies `/api` to the Gateway (no CORS in development). Single page: search, sign in, book.
 - Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
@@ -102,3 +103,4 @@ User sets `Clerk:Authority` in `src/Gateway/appsettings.json`. Then decide step 
 - 2026-10-30: Step 2 done: `CreateBooking` with row lock. Concurrency test (10 parallel requests, 1 room) passes; without the lock it fails.
 - 2026-10-30: Step 3a done: Gateway with `GET /api/search` and gRPC error mapping. Verified end to end (curl → Gateway → Booking → PostgreSQL).
 - 2026-10-30: Step 3b done: Clerk JWT auth, `POST /api/bookings`, rate limiting. 25 tests passing.
+- 2026-10-30: Step 4: React frontend (search, Clerk sign-in, booking). Verified in the browser with real Clerk sign-in.
