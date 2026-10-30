@@ -6,7 +6,7 @@ Phase 4 — Core Implementation
 
 ## Next step
 
-Next: hold expiry job, then my bookings (FR-5) + cancellation (FR-14..16).
+Next: my bookings (FR-5), then cancellation (FR-14..16).
 
 ## Confirmed decisions
 
@@ -60,6 +60,7 @@ Next: hold expiry job, then my bookings (FR-5) + cancellation (FR-14..16).
 - Gateway auth: JWT bearer with Clerk as authority, no audience validation, `MapInboundClaims = false`. Booking endpoint requires `email` claim.
 - Rate limiting: global fixed window per client IP (default 100/min). Forwarded headers needed behind reverse proxy (Phase 7).
 - Frontend: Vite + React + TypeScript, `@clerk/react` v6. Vite dev server proxies `/api` to the Gateway (no CORS in development). Single page: search, sign in, book.
+- Hold expiry: `HoldExpiryJob` (BackgroundService), runs every minute, one atomic `ExecuteUpdate` (`Held` + `ExpiresAt <= now` → `Expired`). Errors are logged; next tick retries.
 - Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
@@ -104,3 +105,4 @@ Next: hold expiry job, then my bookings (FR-5) + cancellation (FR-14..16).
 - 2026-10-30: Step 3a done: Gateway with `GET /api/search` and gRPC error mapping. Verified end to end (curl → Gateway → Booking → PostgreSQL).
 - 2026-10-30: Step 3b done: Clerk JWT auth, `POST /api/bookings`, rate limiting. 25 tests passing.
 - 2026-10-30: Step 4: React frontend (search, Clerk sign-in, booking). Verified in the browser with real Clerk sign-in.
+- 2026-10-30: Hold expiry job done. 26 tests passing; verified against the running service.

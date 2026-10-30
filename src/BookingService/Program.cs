@@ -9,6 +9,8 @@ builder.Services.AddGrpcReflection();
 builder.Services.AddDbContext<BookingDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("BookingDb")));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<HoldExpiryJob>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<HoldExpiryJob>());
 
 var app = builder.Build();
 
