@@ -1,5 +1,8 @@
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 using Gateway;
 using HotelBooking.Contracts.Booking;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,9 +11,38 @@ builder.Services.AddGrpcClient<Bookings.BookingsClient>(options =>
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GrpcExceptionHandler>();
 
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Clerk publishes its signing keys under the Frontend API URL.
+        options.Authority = builder.Configuration["Clerk:Authority"];
+        // Clerk session tokens have no audience claim.
+        options.TokenValidationParameters.ValidateAudience = false;
+        // Keep claim names as in the token ("sub", "email").
+        options.MapInboundClaims = false;
+    });
+builder.Services.AddAuthorization();
+
+// Per client IP. Behind a reverse proxy this needs forwarded headers (Phase 7).
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = builder.Configuration.GetValue("RateLimit:RequestsPerMinute", 100),
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/api/search", async (string city, string checkIn, string checkOut,
     Bookings.BookingsClient bookings, CancellationToken ct) =>
@@ -27,6 +59,24 @@ app.MapGet("/api/search", async (string city, string checkIn, string checkOut,
         rt.PricePerNightCents, rt.TotalPriceCents, rt.AvailableRooms));
 });
 
+app.MapPost("/api/bookings", async (CreateBookingBody body, ClaimsPrincipal user,
+    Bookings.BookingsClient bookings, CancellationToken ct) =>
+{
+    var response = await bookings.CreateBookingAsync(new CreateBookingRequest
+    {
+        RoomTypeId = body.RoomTypeId,
+        CheckInDate = body.CheckIn,
+        CheckOutDate = body.CheckOut,
+        ClerkUserId = user.FindFirstValue("sub")!,
+        Email = user.FindFirstValue("email")!
+    }, cancellationToken: ct);
+
+    return TypedResults.Created($"/api/bookings/{response.BookingId}", new BookingCreated(
+        response.BookingId, response.TotalPriceCents, response.ExpiresAt.ToDateTimeOffset()));
+})
+// The email claim is added to the Clerk session token in the Clerk dashboard.
+.RequireAuthorization(policy => policy.RequireClaim("email"));
+
 app.Run();
 
 record RoomTypeResult(
@@ -37,3 +87,7 @@ record RoomTypeResult(
     long PricePerNightCents,
     long TotalPriceCents,
     int AvailableRooms);
+
+record CreateBookingBody(int RoomTypeId, string CheckIn, string CheckOut);
+
+record BookingCreated(string BookingId, long TotalPriceCents, DateTimeOffset ExpiresAt);

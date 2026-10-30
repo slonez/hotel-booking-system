@@ -6,7 +6,7 @@ Phase 4 — Core Implementation
 
 ## Next step
 
-Step 3b: Clerk JWT validation, `POST /api/bookings`, rate limiting. User sets up a Clerk app (Frontend API URL + `email` claim in session token).
+User sets `Clerk:Authority` in `src/Gateway/appsettings.json`. Then decide step 4 (frontend for manual testing, hold expiry job, or my bookings + cancellation).
 
 ## Confirmed decisions
 
@@ -57,6 +57,8 @@ Step 3b: Clerk JWT validation, `POST /api/bookings`, rate limiting. User sets up
 - User identity (Clerk user ID, email) is passed in gRPC requests by the Gateway. Booking trusts the Gateway (internal network).
 - gRPC errors: unknown room type → `NotFound`, no rooms → `FailedPrecondition`, invalid input → `InvalidArgument`.
 - Gateway: Minimal API, REST → gRPC via `AddGrpcClient`. gRPC errors mapped to ProblemDetails in `GrpcExceptionHandler`. Gateway tests use a fake Bookings client.
+- Gateway auth: JWT bearer with Clerk as authority, no audience validation, `MapInboundClaims = false`. Booking endpoint requires `email` claim.
+- Rate limiting: global fixed window per client IP (default 100/min). Forwarded headers needed behind reverse proxy (Phase 7).
 - Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
@@ -99,3 +101,4 @@ Step 3b: Clerk JWT validation, `POST /api/bookings`, rate limiting. User sets up
 - 2026-10-30: Step 1 done: Booking Service with schema, seed data, `SearchAvailability` gRPC, 9 integration tests passing.
 - 2026-10-30: Step 2 done: `CreateBooking` with row lock. Concurrency test (10 parallel requests, 1 room) passes; without the lock it fails.
 - 2026-10-30: Step 3a done: Gateway with `GET /api/search` and gRPC error mapping. Verified end to end (curl → Gateway → Booking → PostgreSQL).
+- 2026-10-30: Step 3b done: Clerk JWT auth, `POST /api/bookings`, rate limiting. 25 tests passing.

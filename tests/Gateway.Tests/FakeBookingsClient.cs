@@ -1,3 +1,4 @@
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using HotelBooking.Contracts.Booking;
 
@@ -8,6 +9,7 @@ public class FakeBookingsClient : Bookings.BookingsClient
 {
     public SearchAvailabilityRequest? LastSearch { get; private set; }
     public SearchAvailabilityResponse SearchResponse { get; set; } = new();
+    public CreateBookingRequest? LastCreate { get; private set; }
     public RpcException? Error { get; set; }
 
     public override AsyncUnaryCall<SearchAvailabilityResponse> SearchAvailabilityAsync(
@@ -15,6 +17,18 @@ public class FakeBookingsClient : Bookings.BookingsClient
     {
         LastSearch = request;
         return Call(SearchResponse);
+    }
+
+    public override AsyncUnaryCall<CreateBookingResponse> CreateBookingAsync(
+        CreateBookingRequest request, CallOptions options)
+    {
+        LastCreate = request;
+        return Call(new CreateBookingResponse
+        {
+            BookingId = "booking-1",
+            TotalPriceCents = 25800,
+            ExpiresAt = Timestamp.FromDateTimeOffset(new DateTimeOffset(2026, 11, 1, 12, 30, 0, TimeSpan.Zero))
+        });
     }
 
     private AsyncUnaryCall<T> Call<T>(T response) => new(

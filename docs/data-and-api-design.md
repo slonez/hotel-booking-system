@@ -118,6 +118,11 @@ gRPC contracts live in `src/Contracts/Protos`. REST endpoints are in the Gateway
 | REST (Gateway) | Auth | gRPC (Booking) |
 |---|---|---|
 | `GET /api/search?city=&checkIn=&checkOut=` | No | `SearchAvailability` |
+| `POST /api/bookings` `{ roomTypeId, checkIn, checkOut }` | Yes | `CreateBooking` |
+
+- Auth: Clerk session token as `Authorization: Bearer`. Gateway validates it against Clerk's keys and passes `sub` and `email` claims to Booking.
+- `POST /api/bookings` requires the `email` claim (added to the session token in the Clerk dashboard); without it → 403.
+- Rate limit: fixed window per client IP, 100 requests/min by default (`RateLimit:RequestsPerMinute`), 429 when exceeded.
 
 Dates are `yyyy-MM-dd`. Amounts are in cents (EUR).
 
