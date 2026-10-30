@@ -1,0 +1,96 @@
+# Progress
+
+## Current phase
+
+Phase 4 — Core Implementation
+
+## Next step
+
+Step 2: `CreateBooking` with `SELECT ... FOR UPDATE` and a concurrency test (two parallel bookings for the last room).
+
+## Confirmed decisions
+
+- Project lives in `~/repos/hotel-booking-system`.
+- MVP users: customers with login. No admin UI in MVP (hotels and rooms come from seed data).
+- Multi-hotel platform.
+- Customer books a room type, not a specific room.
+- Full payment upfront at booking time.
+- Room is held for the customer during payment (temporary reservation).
+- Hold lasts 30 minutes (matches Stripe Checkout minimum session lifetime). If not paid by then, the room is released.
+- Late payment: if a room of the same type is still available, confirm the booking. Otherwise notify and fully refund.
+- Cancellation and refund are in MVP scope. 100% refund if cancelled at least 24 h before check-in, 50% after that.
+- Search works without login. Booking requires login.
+- Rate limiting instead of DDoS protection (NFR-7).
+- Services: API Gateway, Booking Service, Payment Service, Notification Service.
+- Data ownership:
+  - Booking Service: hotels, room types, prices, bookings (incl. holds and statuses), availability. Search lives here. Stores customer email from JWT on the booking.
+  - Payment Service: payments, refunds, processed Stripe event IDs.
+  - Notification Service: log of sent notifications only. Receives all needed data in events.
+  - API Gateway: stateless, no database. JWT validation, rate limiting (in memory), routing.
+- Communication:
+  - Search: Frontend → Gateway → Booking (sync).
+  - Start booking: Gateway → Booking (creates hold) → Payment (creates Stripe Checkout session), sync. Booking orchestrates, Gateway stays thin.
+  - If Payment call fails: hold is kept, customer sees error and retries. Retry uses booking ID as idempotency key.
+  - Payment succeeded: Stripe webhook → Payment → `PaymentSucceeded` event → Booking (async).
+  - Confirmation email: Booking → event → Notification (async).
+  - Cancellation: sync in Booking (status + room released), refund async via refund event → Payment.
+  - Hold expiry: background job inside Booking, no messaging.
+- One PostgreSQL server, one database + DB user per service.
+- Stripe webhooks go directly to Payment Service, not through the Gateway.
+- Booking decides refunds and calculates the amount; Payment only executes. Same refund event for cancellation and late payment.
+- Microservices chosen for learning (ADR-001).
+- Reliable publishing: transactional outbox in Booking and Payment (at-least-once delivery).
+- Idempotent consumers:
+  - Booking: state-based, option B (e.g. `PaymentSucceeded` only moves Held → Confirmed; already Confirmed → ignore). Check + update must be atomic.
+  - Notification: log of sent notifications (by message ID).
+  - Payment (Stripe webhooks): processed Stripe event IDs.
+- Booking states: Held, Confirmed, Expired, Cancelled (see `docs/data-and-api-design.md`). Late payment without room keeps `Expired`.
+- Booking schema: Hotels, RoomTypes (TotalRooms), Bookings (TotalPrice, ExpiresAt).
+- Double booking prevented with `SELECT ... FOR UPDATE` on the room type row. `ExpiresAt` is the source of truth for hold expiry.
+- Payment states: Pending, Succeeded, Expired. Refund states: Pending, Succeeded, Failed (manual).
+- Payment schema: Payments (BookingId unique), Refunds (PaymentId unique, own table), ProcessedStripeEvents, OutboxMessages.
+- Events: `PaymentSucceeded`, `BookingConfirmed`, `RefundRequested` (see `docs/data-and-api-design.md`).
+- gRPC/REST contracts are defined in Phase 4 per service, not upfront.
+- Repo: monorepo, one solution (`HotelBooking.slnx`). One project per service, no layered architecture. Protos in `src/Contracts/Protos`.
+- .NET 10, PostgreSQL 18 in Docker Compose (host port 5433). Migrations applied at startup in Development.
+- Money stored as integer cents (EUR).
+- Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time.
+- Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
+- Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
+
+## Open questions
+
+### Core Implementation
+
+- None.
+
+### Later (Phase 3/5)
+
+- Payment can succeed right before hold expiry while the webhook arrives after it. Late payment handling (FR-12) covers this.
+
+## Log
+
+- 2026-10-28: Project created. Phase 1 started.
+- 2026-10-28: First MVP decisions made (users, multi-hotel, room type, payment upfront, hold).
+- 2026-10-28: Hold time, late payment, cancellation, search/login decided.
+- 2026-10-28: MVP decisions complete. Draft requirements written.
+- 2026-10-28: FRs approved. First NFR draft (NFR-1..7) written, under review.
+- 2026-10-28: NFRs refined (NFR-1..12). XSS and SQL injection split.
+- 2026-10-28: NFR-13 (Stripe webhook signature verification) added.
+- 2026-10-28: Edge cases written and reviewed.
+- 2026-10-28: Phase 1 complete (`docs/requirements.md`). Phase 2 started.
+- 2026-10-28: Service boundaries proposed. Booking owns catalog + availability. Clerk chosen for auth.
+- 2026-10-28: Data ownership decided. CSRF resolved (Bearer token in header).
+- 2026-10-28: Communication patterns decided.
+- 2026-10-28: Transactional outbox and idempotent consumers decided.
+- 2026-10-28: Draft `docs/architecture.md` written.
+- 2026-10-28: DB layout, webhook route and late payment flow decided.
+- 2026-10-28: ADR-001 written and accepted.
+- 2026-10-29: ADR-002 (auth provider) chosen as next ADR.
+- 2026-10-29: ADR-002 accepted. NFR-10 updated: no passwords stored.
+- 2026-10-29: Phase 2 complete (`docs/architecture.md`, ADR-001, ADR-002). Phase 3 started.
+- 2026-10-29: Booking states decided.
+- 2026-10-29: Booking schema and concurrency control decided.
+- 2026-10-30: Payment states, schema and events decided. Phase 3 complete. Phase 4 started.
+- 2026-10-30: Project brief mentoring style updated (recommend, then decide).
+- 2026-10-30: Step 1 done: Booking Service with schema, seed data, `SearchAvailability` gRPC, 9 integration tests passing.
