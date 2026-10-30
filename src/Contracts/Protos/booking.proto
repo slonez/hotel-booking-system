@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+option csharp_namespace = "HotelBooking.Contracts.Booking";
+
+package booking;
+
+service Bookings {
+  rpc SearchAvailability (SearchAvailabilityRequest) returns (SearchAvailabilityResponse);
+}
+
+message SearchAvailabilityRequest {
+  string city = 1;
+  // Dates are ISO 8601 (yyyy-MM-dd).
+  string check_in_date = 2;
+  string check_out_date = 3;
+}
+
+message SearchAvailabilityResponse {
+  repeated RoomTypeAvailability room_types = 1;
+}
+
+message RoomTypeAvailability {
+  int32 hotel_id = 1;
+  string hotel_name = 2;
+  int32 room_type_id = 3;
+  string room_type_name = 4;
+  // Amounts are in cents (EUR), same as Stripe.
+  int64 price_per_night_cents = 5;
+  int64 total_price_cents = 6;
+  int32 available_rooms = 7;
+}
