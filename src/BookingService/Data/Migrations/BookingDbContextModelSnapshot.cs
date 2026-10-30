@@ -28,6 +28,9 @@ namespace BookingService.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateOnly>("CheckInDate")
                         .HasColumnType("date");
 
@@ -47,6 +50,9 @@ namespace BookingService.Data.Migrations
 
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("RefundAmountCents")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("RoomTypeId")
                         .HasColumnType("integer");

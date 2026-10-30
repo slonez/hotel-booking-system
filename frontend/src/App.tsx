@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Show, SignInButton, UserButton, useAuth } from '@clerk/react'
 import {
+  cancelBooking,
   createBooking,
   listBookings,
   searchRooms,
@@ -65,6 +66,15 @@ export default function App() {
       setResults(await searchRooms(stay.city, stay.checkIn, stay.checkOut))
       await loadMyBookings()
     })
+
+  const cancel = (bookingId: string) => {
+    if (!confirm('Cancel this booking? Less than 24 h before check-in you get a 50% refund.')) return
+    return run(async () => {
+      const token = await getToken()
+      await cancelBooking(bookingId, token!)
+      await loadMyBookings()
+    })
+  }
 
   return (
     <main>
@@ -148,7 +158,7 @@ export default function App() {
 
       <Show when="signed-in">
         <h2>My bookings</h2>
-        <MyBookings bookings={myBookings} />
+        <MyBookings bookings={myBookings} onCancel={cancel} />
       </Show>
     </main>
   )

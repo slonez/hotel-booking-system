@@ -85,7 +85,22 @@ app.MapGet("/api/bookings", async (ClaimsPrincipal user, Bookings.BookingsClient
 
     return response.Bookings.Select(b => new BookingResult(
         b.BookingId, b.HotelName, b.RoomTypeName, b.CheckInDate, b.CheckOutDate,
-        b.Status, b.TotalPriceCents, b.ExpiresAt.ToDateTimeOffset()));
+        b.Status, b.TotalPriceCents, b.ExpiresAt.ToDateTimeOffset(),
+        b.HasRefundAmountCents ? b.RefundAmountCents : null));
+})
+.RequireAuthorization();
+
+// Cancelling is an action, not a delete: the booking stays, its status changes.
+app.MapPost("/api/bookings/{bookingId}/cancel", async (string bookingId, ClaimsPrincipal user,
+    Bookings.BookingsClient bookings, CancellationToken ct) =>
+{
+    var response = await bookings.CancelBookingAsync(new CancelBookingRequest
+    {
+        BookingId = bookingId,
+        ClerkUserId = user.FindFirstValue("sub")!
+    }, cancellationToken: ct);
+
+    return new BookingCancelled(response.RefundAmountCents);
 })
 .RequireAuthorization();
 
@@ -112,4 +127,7 @@ record BookingResult(
     string CheckOut,
     string Status,
     long TotalPriceCents,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    long? RefundAmountCents);
+
+record BookingCancelled(long RefundAmountCents);

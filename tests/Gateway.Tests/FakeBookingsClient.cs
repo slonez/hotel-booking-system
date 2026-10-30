@@ -12,6 +12,7 @@ public class FakeBookingsClient : Bookings.BookingsClient
     public CreateBookingRequest? LastCreate { get; private set; }
     public ListBookingsRequest? LastList { get; private set; }
     public ListBookingsResponse ListResponse { get; set; } = new();
+    public CancelBookingRequest? LastCancel { get; private set; }
     public RpcException? Error { get; set; }
 
     public override AsyncUnaryCall<SearchAvailabilityResponse> SearchAvailabilityAsync(
@@ -38,6 +39,13 @@ public class FakeBookingsClient : Bookings.BookingsClient
     {
         LastList = request;
         return Call(ListResponse);
+    }
+
+    public override AsyncUnaryCall<CancelBookingResponse> CancelBookingAsync(
+        CancelBookingRequest request, CallOptions options)
+    {
+        LastCancel = request;
+        return Call(new CancelBookingResponse { RefundAmountCents = 12900 });
     }
 
     private AsyncUnaryCall<T> Call<T>(T response) => new(

@@ -23,6 +23,7 @@ export type BookingResult = {
   status: 'Held' | 'Confirmed' | 'Expired' | 'Cancelled'
   totalPriceCents: number
   expiresAt: string
+  refundAmountCents: number | null
 }
 
 export function searchRooms(city: string, checkIn: string, checkOut: string) {
@@ -43,6 +44,13 @@ export function createBooking(roomTypeId: number, checkIn: string, checkOut: str
 
 export function listBookings(token: string) {
   return request<BookingResult[]>('/api/bookings', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
+export function cancelBooking(bookingId: string, token: string) {
+  return request<{ refundAmountCents: number }>(`/api/bookings/${bookingId}/cancel`, {
+    method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   })
 }

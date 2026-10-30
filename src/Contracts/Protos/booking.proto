@@ -10,6 +10,7 @@ service Bookings {
   rpc SearchAvailability (SearchAvailabilityRequest) returns (SearchAvailabilityResponse);
   rpc CreateBooking (CreateBookingRequest) returns (CreateBookingResponse);
   rpc ListBookings (ListBookingsRequest) returns (ListBookingsResponse);
+  rpc CancelBooking (CancelBookingRequest) returns (CancelBookingResponse);
 }
 
 message SearchAvailabilityRequest {
@@ -67,4 +68,15 @@ message BookingSummary {
   string status = 6;
   int64 total_price_cents = 7;
   google.protobuf.Timestamp expires_at = 8;
+  // Set only for cancelled bookings.
+  optional int64 refund_amount_cents = 9;
+}
+
+message CancelBookingRequest {
+  string booking_id = 1;
+  string clerk_user_id = 2;
+}
+
+message CancelBookingResponse {
+  int64 refund_amount_cents = 1;
 }

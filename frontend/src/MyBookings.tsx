@@ -1,7 +1,12 @@
 import type { BookingResult } from './api'
 import { euros } from './format'
 
-export default function MyBookings({ bookings }: { bookings: BookingResult[] }) {
+type Props = {
+  bookings: BookingResult[]
+  onCancel: (bookingId: string) => void
+}
+
+export default function MyBookings({ bookings, onCancel }: Props) {
   if (bookings.length === 0) return <p>No bookings yet.</p>
 
   return (
@@ -13,6 +18,7 @@ export default function MyBookings({ bookings }: { bookings: BookingResult[] }) 
           <th>Dates</th>
           <th>Total</th>
           <th>Status</th>
+          <th />
         </tr>
       </thead>
       <tbody>
@@ -27,7 +33,9 @@ export default function MyBookings({ bookings }: { bookings: BookingResult[] }) 
             <td>
               {b.status}
               {b.status === 'Held' && ` until ${new Date(b.expiresAt).toLocaleTimeString('fi-FI')}`}
+              {b.refundAmountCents !== null && `, refund ${euros(b.refundAmountCents)}`}
             </td>
+            <td>{b.status === 'Confirmed' && <button onClick={() => onCancel(b.bookingId)}>Cancel</button>}</td>
           </tr>
         ))}
       </tbody>

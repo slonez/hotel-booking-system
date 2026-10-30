@@ -109,26 +109,67 @@ public class BookingsService(BookingDbContext db, TimeProvider time) : Bookings.
             .OrderByDescending(b => b.CreatedAt)
             .Select(b => new
             {
-                b.Id, b.Status, b.CheckInDate, b.CheckOutDate, b.TotalPriceCents, b.ExpiresAt,
+                b.Id, b.Status, b.CheckInDate, b.CheckOutDate, b.TotalPriceCents, b.ExpiresAt, b.RefundAmountCents,
                 HotelName = b.RoomType.Hotel.Name,
                 RoomTypeName = b.RoomType.Name
             })
             .ToListAsync(context.CancellationToken);
 
         var response = new ListBookingsResponse();
-        response.Bookings.AddRange(bookings.Select(b => new BookingSummary
+        foreach (var b in bookings)
         {
-            BookingId = b.Id.ToString(),
-            HotelName = b.HotelName,
-            RoomTypeName = b.RoomTypeName,
-            CheckInDate = b.CheckInDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            CheckOutDate = b.CheckOutDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            // Same rule as availability: a hold past ExpiresAt is expired even before the job runs.
-            Status = (b.Status == BookingStatus.Held && b.ExpiresAt <= now ? BookingStatus.Expired : b.Status).ToString(),
-            TotalPriceCents = b.TotalPriceCents,
-            ExpiresAt = Timestamp.FromDateTimeOffset(b.ExpiresAt)
-        }));
+            var summary = new BookingSummary
+            {
+                BookingId = b.Id.ToString(),
+                HotelName = b.HotelName,
+                RoomTypeName = b.RoomTypeName,
+                CheckInDate = b.CheckInDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                CheckOutDate = b.CheckOutDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                // Same rule as availability: a hold past ExpiresAt is expired even before the job runs.
+                Status = (b.Status == BookingStatus.Held && b.ExpiresAt <= now ? BookingStatus.Expired : b.Status).ToString(),
+                TotalPriceCents = b.TotalPriceCents,
+                ExpiresAt = Timestamp.FromDateTimeOffset(b.ExpiresAt)
+            };
+            // Proto optional fields cannot be set to null; leave unset instead.
+            if (b.RefundAmountCents is { } refund)
+                summary.RefundAmountCents = refund;
+            response.Bookings.Add(summary);
+        }
         return response;
+    }
+
+    public override async Task<CancelBookingResponse> CancelBooking(
+        CancelBookingRequest request, ServerCallContext context)
+    {
+        var ct = context.CancellationToken;
+        var now = time.GetUtcNow();
+
+        // Another user's booking looks the same as a missing one, so its existence is not revealed (NFR-6).
+        var booking = Guid.TryParse(request.BookingId, out var id)
+            ? await db.Bookings
+                .Include(b => b.RoomType).ThenInclude(rt => rt.Hotel)
+                .SingleOrDefaultAsync(b => b.Id == id && b.ClerkUserId == request.ClerkUserId, ct)
+            : null;
+        if (booking is null)
+            throw new RpcException(new Status(StatusCode.NotFound, "Booking not found."));
+        if (booking.Status != BookingStatus.Confirmed)
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "Only confirmed bookings can be cancelled."));
+
+        var checkIn = CancellationPolicy.CheckInMoment(booking.CheckInDate, booking.RoomType.Hotel);
+        var refund = CancellationPolicy.RefundAmount(booking.TotalPriceCents, checkIn, now)
+            ?? throw new RpcException(new Status(StatusCode.FailedPrecondition, "Bookings cannot be cancelled after check-in time."));
+
+        // Atomic transition: only succeeds if the booking is still Confirmed.
+        var updated = await db.Bookings
+            .Where(b => b.Id == booking.Id && b.Status == BookingStatus.Confirmed)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(b => b.Status, BookingStatus.Cancelled)
+                .SetProperty(b => b.CancelledAt, now)
+                .SetProperty(b => b.RefundAmountCents, refund), ct);
+        if (updated == 0)
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "Only confirmed bookings can be cancelled."));
+
+        return new CancelBookingResponse { RefundAmountCents = refund };
     }
 
     private (DateOnly CheckIn, DateOnly CheckOut) ParseStay(string checkInText, string checkOutText)

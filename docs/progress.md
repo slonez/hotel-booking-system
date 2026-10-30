@@ -6,7 +6,7 @@ Phase 4 — Core Implementation
 
 ## Next step
 
-Next: cancellation (FR-14..16). Refund amount calculated in Booking; the actual refund comes in Phase 5.
+Phase 4 review: walk through the code and decide what to improve before Phase 5 (Stripe).
 
 ## Confirmed decisions
 
@@ -73,6 +73,8 @@ Next: cancellation (FR-14..16). Refund amount calculated in Booking; the actual 
 
 ### Later (Phase 3/5)
 
+- Cancellation does not publish `RefundRequested` yet (needs outbox).
+
 - Payment can succeed right before hold expiry while the webhook arrives after it. Late payment handling (FR-12) covers this.
 
 ## Log
@@ -107,3 +109,4 @@ Next: cancellation (FR-14..16). Refund amount calculated in Booking; the actual 
 - 2026-10-30: Step 4: React frontend (search, Clerk sign-in, booking). Verified in the browser with real Clerk sign-in.
 - 2026-10-30: Hold expiry job done. 26 tests passing; verified against the running service.
 - 2026-10-30: My bookings (FR-5) done: `ListBookings` gRPC, `GET /api/bookings`, frontend list. 30 tests passing.
+- 2026-10-30: Cancellation (FR-14..16) done: `CancellationPolicy`, `CancelBooking` gRPC, `POST /api/bookings/{id}/cancel`, frontend button. 46 tests passing. Phase 4 features complete.

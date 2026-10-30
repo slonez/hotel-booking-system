@@ -37,7 +37,8 @@ RoomTypes
 
 Bookings
   Id, RoomTypeId, ClerkUserId, Email, Status,
-  CheckInDate, CheckOutDate, TotalPrice, ExpiresAt, CreatedAt
+  CheckInDate, CheckOutDate, TotalPrice, ExpiresAt, CreatedAt,
+  CancelledAt, RefundAmount
 ```
 
 - `TotalRooms` is the fixed number of rooms of this type. Availability is calculated from bookings.
@@ -65,6 +66,13 @@ COMMIT;
 - Trade-off: bookings for the same room type are serialized even for different dates. Fine for our load (NFR-5). A per-night inventory table would scale better but is not needed.
 - `ExpiresAt` is the source of truth for hold expiry. The expiry job only updates the status.
 - `PaymentSucceeded` confirms directly only if `Status = 'Held' AND ExpiresAt > now()`. Otherwise it goes through the late payment path, which re-checks availability under the same lock.
+
+## Cancellation
+
+- Only `Confirmed` bookings can be cancelled, until the hotel's local check-in time.
+- Refund: 100% if at least 24 h before check-in, otherwise 50% (rounded down to whole cents). Logic in `CancellationPolicy`.
+- `CancelledAt` and `RefundAmount` are stored on the booking. Another user's booking returns `NotFound` (NFR-6).
+- The `RefundRequested` event is added with the outbox (Phase 5–6).
 
 ## Payment states
 
@@ -120,6 +128,7 @@ gRPC contracts live in `src/Contracts/Protos`. REST endpoints are in the Gateway
 | `GET /api/search?city=&checkIn=&checkOut=` | No | `SearchAvailability` |
 | `POST /api/bookings` `{ roomTypeId, checkIn, checkOut }` | Yes | `CreateBooking` |
 | `GET /api/bookings` | Yes | `ListBookings` |
+| `POST /api/bookings/{id}/cancel` | Yes | `CancelBooking` |
 
 - `GET /api/bookings` returns only the signed-in user's bookings, newest first. The user ID comes from the token (NFR-6). A hold past `ExpiresAt` is shown as `Expired` even before the expiry job runs.
 

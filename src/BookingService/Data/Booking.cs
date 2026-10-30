@@ -13,6 +13,8 @@ public class Booking
     public long TotalPriceCents { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? CancelledAt { get; set; }
+    public long? RefundAmountCents { get; set; }
 }
 
 public enum BookingStatus
