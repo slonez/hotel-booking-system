@@ -113,4 +113,22 @@ All events go through the outbox (at-least-once). Consumers are idempotent.
 
 ## API contracts
 
-gRPC and REST contracts are defined in Phase 4, service by service, as they are implemented.
+gRPC contracts live in `src/Contracts/Protos`. REST endpoints are in the Gateway.
+
+| REST (Gateway) | Auth | gRPC (Booking) |
+|---|---|---|
+| `GET /api/search?city=&checkIn=&checkOut=` | No | `SearchAvailability` |
+
+Dates are `yyyy-MM-dd`. Amounts are in cents (EUR).
+
+### Error mapping
+
+Gateway translates gRPC errors to HTTP `application/problem+json`:
+
+| gRPC | HTTP | Detail shown to user |
+|---|---|---|
+| `InvalidArgument` | 400 | Backend message |
+| `NotFound` | 404 | Backend message |
+| `FailedPrecondition` | 409 | Backend message |
+| `Unavailable` | 503 | Generic message |
+| Other | 500 | None |

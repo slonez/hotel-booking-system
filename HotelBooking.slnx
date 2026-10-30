@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/BookingService/BookingService.csproj" />
+    <Project Path="src/Gateway/Gateway.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BookingService.Tests/BookingService.Tests.csproj" />
+    <Project Path="tests/Gateway.Tests/Gateway.Tests.csproj" />
   </Folder>
 </Solution>
