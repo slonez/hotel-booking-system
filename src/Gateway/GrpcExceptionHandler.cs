@@ -18,6 +18,7 @@ public class GrpcExceptionHandler(IProblemDetailsService problemDetails) : IExce
             StatusCode.NotFound => (StatusCodes.Status404NotFound, rpc.Status.Detail),
             StatusCode.FailedPrecondition => (StatusCodes.Status409Conflict, rpc.Status.Detail),
             StatusCode.Unavailable => (StatusCodes.Status503ServiceUnavailable, "Service is temporarily unavailable."),
+            StatusCode.DeadlineExceeded => (StatusCodes.Status504GatewayTimeout, "Service did not respond in time."),
             _ => (StatusCodes.Status500InternalServerError, null)
         };
 

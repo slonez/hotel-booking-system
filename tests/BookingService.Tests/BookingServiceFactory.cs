@@ -1,3 +1,4 @@
+using System.Globalization;
 using BookingService.Data;
 using Grpc.Net.Client;
 using HotelBooking.Contracts.Booking;
@@ -9,6 +10,14 @@ using Microsoft.Extensions.Time.Testing;
 using Testcontainers.PostgreSql;
 
 namespace BookingService.Tests;
+
+// All integration test classes share one service and one PostgreSQL container.
+// Classes in the same collection run one after another, so they don't see each other's data.
+[CollectionDefinition(Name)]
+public class BookingServiceCollection : ICollectionFixture<BookingServiceFactory>
+{
+    public const string Name = "BookingService";
+}
 
 // Runs Booking Service in memory against a real PostgreSQL in Docker.
 public class BookingServiceFactory : WebApplicationFactory<Program>, IAsyncLifetime
@@ -34,6 +43,47 @@ public class BookingServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
 
     public BookingDbContext CreateDbContext() =>
         new(new DbContextOptionsBuilder<BookingDbContext>().UseNpgsql(ConnectionString).Options);
+
+    public async Task DeleteBookingsAsync()
+    {
+        await using var db = CreateDbContext();
+        await db.Bookings.ExecuteDeleteAsync();
+    }
+
+    public async Task AddBookingsAsync(params Booking[] bookings)
+    {
+        await using var db = CreateDbContext();
+        db.Bookings.AddRange(bookings);
+        await db.SaveChangesAsync();
+    }
+
+    // Defaults: Hotel Aurora "Double Room" (id 2), 10.-12.11.2026, hold expires 30 min after creation.
+    public Booking NewBooking(
+        BookingStatus status,
+        int roomTypeId = 2,
+        string userId = "user_test",
+        string checkIn = "2026-11-10",
+        string checkOut = "2026-11-12",
+        long totalPriceCents = 25800,
+        TimeSpan? expiresIn = null,
+        TimeSpan? createdAgo = null)
+    {
+        var now = Time.GetUtcNow();
+        var createdAt = now - (createdAgo ?? TimeSpan.Zero);
+        return new Booking
+        {
+            Id = Guid.CreateVersion7(),
+            RoomTypeId = roomTypeId,
+            ClerkUserId = userId,
+            Email = $"{userId}@example.com",
+            Status = status,
+            CheckInDate = DateOnly.Parse(checkIn, CultureInfo.InvariantCulture),
+            CheckOutDate = DateOnly.Parse(checkOut, CultureInfo.InvariantCulture),
+            TotalPriceCents = totalPriceCents,
+            ExpiresAt = expiresIn is { } e ? now + e : createdAt.AddMinutes(30),
+            CreatedAt = createdAt
+        };
+    }
 
     public Task InitializeAsync() => _postgres.StartAsync();
 

@@ -50,6 +50,7 @@ public class SearchTests : IClassFixture<GatewayFactory>
     [InlineData(StatusCode.NotFound, HttpStatusCode.NotFound)]
     [InlineData(StatusCode.FailedPrecondition, HttpStatusCode.Conflict)]
     [InlineData(StatusCode.Unavailable, HttpStatusCode.ServiceUnavailable)]
+    [InlineData(StatusCode.DeadlineExceeded, HttpStatusCode.GatewayTimeout)]
     [InlineData(StatusCode.Internal, HttpStatusCode.InternalServerError)]
     public async Task Maps_grpc_errors_to_problem_details(StatusCode grpcStatus, HttpStatusCode httpStatus)
     {

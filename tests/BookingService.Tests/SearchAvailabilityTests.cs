@@ -1,22 +1,19 @@
 using BookingService.Data;
 using Grpc.Core;
 using HotelBooking.Contracts.Booking;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookingService.Tests;
 
 // Seed data: Hotel Aurora (Helsinki) has room type 2 "Double Room" with 3 rooms.
-public class SearchAvailabilityTests(BookingServiceFactory factory) : IClassFixture<BookingServiceFactory>, IAsyncLifetime
+[Collection(BookingServiceCollection.Name)]
+public class SearchAvailabilityTests(BookingServiceFactory factory) : IAsyncLifetime
 {
     private const int AuroraDouble = 2;
+
     // Creating the client starts the service, which applies migrations and seed data.
     private readonly Bookings.BookingsClient _client = factory.CreateGrpcClient();
 
-    public async Task InitializeAsync()
-    {
-        await using var db = factory.CreateDbContext();
-        await db.Bookings.ExecuteDeleteAsync();
-    }
+    public Task InitializeAsync() => factory.DeleteBookingsAsync();
 
     public Task DisposeAsync() => Task.CompletedTask;
 
@@ -36,13 +33,13 @@ public class SearchAvailabilityTests(BookingServiceFactory factory) : IClassFixt
     [Fact]
     public async Task Confirmed_bookings_and_active_holds_take_rooms_but_expired_holds_do_not()
     {
-        await AddBookings(
-            Booking(BookingStatus.Confirmed, "2026-11-10", "2026-11-12"),
-            Booking(BookingStatus.Held, "2026-11-10", "2026-11-12", expiresIn: TimeSpan.FromMinutes(10)),
+        await factory.AddBookingsAsync(
+            factory.NewBooking(BookingStatus.Confirmed),
+            factory.NewBooking(BookingStatus.Held, expiresIn: TimeSpan.FromMinutes(10)),
             // Status not yet updated by the expiry job, but ExpiresAt has passed.
-            Booking(BookingStatus.Held, "2026-11-10", "2026-11-12", expiresIn: TimeSpan.FromMinutes(-1)),
-            Booking(BookingStatus.Expired, "2026-11-10", "2026-11-12"),
-            Booking(BookingStatus.Cancelled, "2026-11-10", "2026-11-12"));
+            factory.NewBooking(BookingStatus.Held, expiresIn: TimeSpan.FromMinutes(-1)),
+            factory.NewBooking(BookingStatus.Expired),
+            factory.NewBooking(BookingStatus.Cancelled));
 
         var response = await Search("Helsinki", "2026-11-10", "2026-11-12");
 
@@ -52,9 +49,9 @@ public class SearchAvailabilityTests(BookingServiceFactory factory) : IClassFixt
     [Fact]
     public async Task Back_to_back_bookings_take_only_one_room()
     {
-        await AddBookings(
-            Booking(BookingStatus.Confirmed, "2026-11-10", "2026-11-11"),
-            Booking(BookingStatus.Confirmed, "2026-11-11", "2026-11-12"));
+        await factory.AddBookingsAsync(
+            factory.NewBooking(BookingStatus.Confirmed, checkIn: "2026-11-10", checkOut: "2026-11-11"),
+            factory.NewBooking(BookingStatus.Confirmed, checkIn: "2026-11-11", checkOut: "2026-11-12"));
 
         var response = await Search("Helsinki", "2026-11-10", "2026-11-12");
 
@@ -64,7 +61,8 @@ public class SearchAvailabilityTests(BookingServiceFactory factory) : IClassFixt
     [Fact]
     public async Task Booking_ending_on_check_in_day_does_not_overlap()
     {
-        await AddBookings(Booking(BookingStatus.Confirmed, "2026-11-08", "2026-11-10"));
+        await factory.AddBookingsAsync(
+            factory.NewBooking(BookingStatus.Confirmed, checkIn: "2026-11-08", checkOut: "2026-11-10"));
 
         var response = await Search("Helsinki", "2026-11-10", "2026-11-12");
 
@@ -94,24 +92,4 @@ public class SearchAvailabilityTests(BookingServiceFactory factory) : IClassFixt
 
     private static RoomTypeAvailability AuroraDoubleRoom(SearchAvailabilityResponse response) =>
         response.RoomTypes.Single(rt => rt.RoomTypeId == AuroraDouble);
-
-    private Booking Booking(BookingStatus status, string checkIn, string checkOut, TimeSpan? expiresIn = null) => new()
-    {
-        RoomTypeId = AuroraDouble,
-        ClerkUserId = "user_test",
-        Email = "test@example.com",
-        Status = status,
-        CheckInDate = DateOnly.Parse(checkIn),
-        CheckOutDate = DateOnly.Parse(checkOut),
-        TotalPriceCents = 12900,
-        ExpiresAt = factory.Time.GetUtcNow() + (expiresIn ?? TimeSpan.FromMinutes(-60)),
-        CreatedAt = factory.Time.GetUtcNow()
-    };
-
-    private async Task AddBookings(params Booking[] bookings)
-    {
-        await using var db = factory.CreateDbContext();
-        db.Bookings.AddRange(bookings);
-        await db.SaveChangesAsync();
-    }
 }

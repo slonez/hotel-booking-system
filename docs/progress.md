@@ -6,7 +6,7 @@ Phase 4 — Core Implementation
 
 ## Next step
 
-Phase 4 review: walk through the code and decide what to improve before Phase 5 (Stripe).
+Phase 5 (Stripe): decide A) RabbitMQ + outbox already in Phase 5 or B) temporary gRPC call Payment → Booking, and Stripe Checkout vs Payment Intents.
 
 ## Confirmed decisions
 
@@ -41,7 +41,7 @@ Phase 4 review: walk through the code and decide what to improve before Phase 5 
 - Microservices chosen for learning (ADR-001).
 - Reliable publishing: transactional outbox in Booking and Payment (at-least-once delivery).
 - Idempotent consumers:
-  - Booking: state-based, option B (e.g. `PaymentSucceeded` only moves Held → Confirmed; already Confirmed → ignore). Check + update must be atomic.
+  - Booking: state-based, option B (`PaymentSucceeded` moves Held or Expired → Confirmed if a room is free; already Confirmed → ignore). Check + update must be atomic.
   - Notification: log of sent notifications (by message ID).
   - Payment (Stripe webhooks): processed Stripe event IDs.
 - Booking states: Held, Confirmed, Expired, Cancelled (see `docs/data-and-api-design.md`). Late payment without room keeps `Expired`.
@@ -61,7 +61,8 @@ Phase 4 review: walk through the code and decide what to improve before Phase 5 
 - Rate limiting: global fixed window per client IP (default 100/min). Forwarded headers needed behind reverse proxy (Phase 7).
 - Frontend: Vite + React + TypeScript, `@clerk/react` v6. Vite dev server proxies `/api` to the Gateway (no CORS in development). Single page: search, sign in, book.
 - Hold expiry: `HoldExpiryJob` (BackgroundService), runs every minute, one atomic `ExecuteUpdate` (`Held` + `ExpiresAt <= now` → `Expired`). Errors are logged; next tick retries.
-- Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time.
+- Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time. Booking tests share one container (xUnit collection fixture) and clear bookings before each test.
+- Gateway → Booking gRPC calls get a 5 s default deadline (`DeadlineInterceptor`). `DeadlineExceeded` → 504.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
 
@@ -110,3 +111,4 @@ Phase 4 review: walk through the code and decide what to improve before Phase 5 
 - 2026-10-30: Hold expiry job done. 26 tests passing; verified against the running service.
 - 2026-10-30: My bookings (FR-5) done: `ListBookings` gRPC, `GET /api/bookings`, frontend list. 30 tests passing.
 - 2026-10-30: Cancellation (FR-14..16) done: `CancellationPolicy`, `CancelBooking` gRPC, `POST /api/bookings/{id}/cancel`, frontend button. 46 tests passing. Phase 4 features complete.
+- 2026-10-30: Phase 4 review fixes: gRPC deadline (504), shared test container and test data helpers, idempotency note corrected. 49 tests passing. Phase 4 complete.

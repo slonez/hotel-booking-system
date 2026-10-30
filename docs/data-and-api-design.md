@@ -148,4 +148,5 @@ Gateway translates gRPC errors to HTTP `application/problem+json`:
 | `NotFound` | 404 | Backend message |
 | `FailedPrecondition` | 409 | Backend message |
 | `Unavailable` | 503 | Generic message |
+| `DeadlineExceeded` (5 s default) | 504 | Generic message |
 | Other | 500 | None |

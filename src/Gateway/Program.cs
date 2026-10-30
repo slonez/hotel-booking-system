@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddGrpcClient<Bookings.BookingsClient>(options =>
-    options.Address = new Uri(builder.Configuration["Services:Booking"]!));
+    options.Address = new Uri(builder.Configuration["Services:Booking"]!))
+    .AddInterceptor(_ => new DeadlineInterceptor());
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GrpcExceptionHandler>();
 

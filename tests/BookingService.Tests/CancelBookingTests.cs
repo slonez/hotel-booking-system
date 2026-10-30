@@ -6,25 +6,22 @@ using Microsoft.EntityFrameworkCore;
 namespace BookingService.Tests;
 
 // Seed data: Seaside "Suite" (id 4) has 1 room. Test time is 2026-11-01 12:00 UTC.
-public class CancelBookingTests(BookingServiceFactory factory) : IClassFixture<BookingServiceFactory>, IAsyncLifetime
+[Collection(BookingServiceCollection.Name)]
+public class CancelBookingTests(BookingServiceFactory factory) : IAsyncLifetime
 {
     private const int SeasideSuite = 4;
 
     // Creating the client starts the service, which applies migrations and seed data.
     private readonly Bookings.BookingsClient _client = factory.CreateGrpcClient();
 
-    public async Task InitializeAsync()
-    {
-        await using var db = factory.CreateDbContext();
-        await db.Bookings.ExecuteDeleteAsync();
-    }
+    public Task InitializeAsync() => factory.DeleteBookingsAsync();
 
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task Cancels_confirmed_booking_with_full_refund_and_releases_the_room()
     {
-        var booking = await AddBooking("user_a", BookingStatus.Confirmed);
+        var booking = await AddSuiteBooking("user_a", BookingStatus.Confirmed);
 
         var response = await Cancel(booking.Id, "user_a");
 
@@ -45,7 +42,7 @@ public class CancelBookingTests(BookingServiceFactory factory) : IClassFixture<B
     [Fact]
     public async Task Another_users_booking_is_not_found()
     {
-        var booking = await AddBooking("user_a", BookingStatus.Confirmed);
+        var booking = await AddSuiteBooking("user_a", BookingStatus.Confirmed);
 
         var ex = await Assert.ThrowsAsync<RpcException>(() => Cancel(booking.Id, "user_b"));
 
@@ -58,7 +55,7 @@ public class CancelBookingTests(BookingServiceFactory factory) : IClassFixture<B
     [InlineData(BookingStatus.Cancelled)]
     public async Task Only_confirmed_bookings_can_be_cancelled(BookingStatus status)
     {
-        var booking = await AddBooking("user_a", status);
+        var booking = await AddSuiteBooking("user_a", status);
 
         var ex = await Assert.ThrowsAsync<RpcException>(() => Cancel(booking.Id, "user_a"));
 
@@ -72,24 +69,10 @@ public class CancelBookingTests(BookingServiceFactory factory) : IClassFixture<B
             ClerkUserId = userId
         });
 
-    private async Task<Booking> AddBooking(string userId, BookingStatus status)
+    private async Task<Booking> AddSuiteBooking(string userId, BookingStatus status)
     {
-        var booking = new Booking
-        {
-            Id = Guid.CreateVersion7(),
-            RoomTypeId = SeasideSuite,
-            ClerkUserId = userId,
-            Email = $"{userId}@example.com",
-            Status = status,
-            CheckInDate = new DateOnly(2026, 11, 10),
-            CheckOutDate = new DateOnly(2026, 11, 12),
-            TotalPriceCents = 59800,
-            ExpiresAt = factory.Time.GetUtcNow().AddMinutes(30),
-            CreatedAt = factory.Time.GetUtcNow()
-        };
-        await using var db = factory.CreateDbContext();
-        db.Bookings.Add(booking);
-        await db.SaveChangesAsync();
+        var booking = factory.NewBooking(status, roomTypeId: SeasideSuite, userId: userId, totalPriceCents: 59800);
+        await factory.AddBookingsAsync(booking);
         return booking;
     }
 }

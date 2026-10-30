@@ -6,7 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace BookingService.Tests;
 
 // Seed data: Hotel Aurora "Double Room" (id 2) has 3 rooms at 129 EUR, Seaside "Suite" (id 4) has 1 room.
-public class CreateBookingTests(BookingServiceFactory factory) : IClassFixture<BookingServiceFactory>, IAsyncLifetime
+[Collection(BookingServiceCollection.Name)]
+public class CreateBookingTests(BookingServiceFactory factory) : IAsyncLifetime
 {
     private const int AuroraDouble = 2;
     private const int SeasideSuite = 4;
@@ -14,11 +15,7 @@ public class CreateBookingTests(BookingServiceFactory factory) : IClassFixture<B
     // Creating the client starts the service, which applies migrations and seed data.
     private readonly Bookings.BookingsClient _client = factory.CreateGrpcClient();
 
-    public async Task InitializeAsync()
-    {
-        await using var db = factory.CreateDbContext();
-        await db.Bookings.ExecuteDeleteAsync();
-    }
+    public Task InitializeAsync() => factory.DeleteBookingsAsync();
 
     public Task DisposeAsync() => Task.CompletedTask;
 
