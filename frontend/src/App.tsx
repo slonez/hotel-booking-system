@@ -1,20 +1,43 @@
-import { useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Show, SignInButton, UserButton, useAuth } from '@clerk/react'
-import { createBooking, searchRooms, type BookingCreated, type RoomTypeResult } from './api'
+import {
+  createBooking,
+  listBookings,
+  searchRooms,
+  type BookingCreated,
+  type BookingResult,
+  type RoomTypeResult,
+} from './api'
+import { euros } from './format'
+import MyBookings from './MyBookings'
 
 type Stay = { city: string; checkIn: string; checkOut: string }
 
-const euros = (cents: number) =>
-  (cents / 100).toLocaleString('fi-FI', { style: 'currency', currency: 'EUR' })
-
 export default function App() {
-  const { getToken } = useAuth()
+  const { getToken, isSignedIn } = useAuth()
   const [form, setForm] = useState<Stay>({ city: 'Helsinki', checkIn: '', checkOut: '' })
   // Booking uses the dates of the last search, not whatever is in the form now.
   const [searched, setSearched] = useState<Stay | null>(null)
   const [results, setResults] = useState<RoomTypeResult[]>([])
   const [booking, setBooking] = useState<BookingCreated | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [myBookings, setMyBookings] = useState<BookingResult[]>([])
+
+  const loadMyBookings = useCallback(async () => {
+    try {
+      const token = await getToken()
+      setMyBookings(await listBookings(token!))
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }, [getToken])
+
+  // Load the user's bookings when they sign in.
+  useEffect(() => {
+    // State is set after the request completes, not synchronously in the effect.
+    // oxlint-disable-next-line react/set-state-in-effect
+    if (isSignedIn) void loadMyBookings()
+  }, [isSignedIn, loadMyBookings])
 
   async function run(action: () => Promise<void>) {
     setError(null)
@@ -40,6 +63,7 @@ export default function App() {
       const token = await getToken()
       setBooking(await createBooking(roomTypeId, stay.checkIn, stay.checkOut, token!))
       setResults(await searchRooms(stay.city, stay.checkIn, stay.checkOut))
+      await loadMyBookings()
     })
 
   return (
@@ -121,6 +145,11 @@ export default function App() {
         </table>
       )}
       {searched && results.length === 0 && <p>No hotels found in {searched.city}.</p>}
+
+      <Show when="signed-in">
+        <h2>My bookings</h2>
+        <MyBookings bookings={myBookings} />
+      </Show>
     </main>
   )
 }

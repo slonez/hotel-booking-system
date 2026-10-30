@@ -77,6 +77,18 @@ app.MapPost("/api/bookings", async (CreateBookingBody body, ClaimsPrincipal user
 // The email claim is added to the Clerk session token in the Clerk dashboard.
 .RequireAuthorization(policy => policy.RequireClaim("email"));
 
+// The user ID comes from the token, so users can only list their own bookings (NFR-6).
+app.MapGet("/api/bookings", async (ClaimsPrincipal user, Bookings.BookingsClient bookings, CancellationToken ct) =>
+{
+    var response = await bookings.ListBookingsAsync(
+        new ListBookingsRequest { ClerkUserId = user.FindFirstValue("sub")! }, cancellationToken: ct);
+
+    return response.Bookings.Select(b => new BookingResult(
+        b.BookingId, b.HotelName, b.RoomTypeName, b.CheckInDate, b.CheckOutDate,
+        b.Status, b.TotalPriceCents, b.ExpiresAt.ToDateTimeOffset()));
+})
+.RequireAuthorization();
+
 app.Run();
 
 record RoomTypeResult(
@@ -91,3 +103,13 @@ record RoomTypeResult(
 record CreateBookingBody(int RoomTypeId, string CheckIn, string CheckOut);
 
 record BookingCreated(string BookingId, long TotalPriceCents, DateTimeOffset ExpiresAt);
+
+record BookingResult(
+    string BookingId,
+    string HotelName,
+    string RoomTypeName,
+    string CheckIn,
+    string CheckOut,
+    string Status,
+    long TotalPriceCents,
+    DateTimeOffset ExpiresAt);

@@ -119,6 +119,9 @@ gRPC contracts live in `src/Contracts/Protos`. REST endpoints are in the Gateway
 |---|---|---|
 | `GET /api/search?city=&checkIn=&checkOut=` | No | `SearchAvailability` |
 | `POST /api/bookings` `{ roomTypeId, checkIn, checkOut }` | Yes | `CreateBooking` |
+| `GET /api/bookings` | Yes | `ListBookings` |
+
+- `GET /api/bookings` returns only the signed-in user's bookings, newest first. The user ID comes from the token (NFR-6). A hold past `ExpiresAt` is shown as `Expired` even before the expiry job runs.
 
 - Auth: Clerk session token as `Authorization: Bearer`. Gateway validates it against Clerk's keys and passes `sub` and `email` claims to Booking.
 - `POST /api/bookings` requires the `email` claim (added to the session token in the Clerk dashboard); without it → 403.

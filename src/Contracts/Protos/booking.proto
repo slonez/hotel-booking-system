@@ -9,6 +9,7 @@ import "google/protobuf/timestamp.proto";
 service Bookings {
   rpc SearchAvailability (SearchAvailabilityRequest) returns (SearchAvailabilityResponse);
   rpc CreateBooking (CreateBookingRequest) returns (CreateBookingResponse);
+  rpc ListBookings (ListBookingsRequest) returns (ListBookingsResponse);
 }
 
 message SearchAvailabilityRequest {
@@ -46,4 +47,24 @@ message CreateBookingResponse {
   string booking_id = 1;
   int64 total_price_cents = 2;
   google.protobuf.Timestamp expires_at = 3;
+}
+
+message ListBookingsRequest {
+  string clerk_user_id = 1;
+}
+
+message ListBookingsResponse {
+  repeated BookingSummary bookings = 1;
+}
+
+message BookingSummary {
+  string booking_id = 1;
+  string hotel_name = 2;
+  string room_type_name = 3;
+  string check_in_date = 4;
+  string check_out_date = 5;
+  // Held, Confirmed, Expired or Cancelled.
+  string status = 6;
+  int64 total_price_cents = 7;
+  google.protobuf.Timestamp expires_at = 8;
 }

@@ -14,6 +14,17 @@ export type BookingCreated = {
   expiresAt: string
 }
 
+export type BookingResult = {
+  bookingId: string
+  hotelName: string
+  roomTypeName: string
+  checkIn: string
+  checkOut: string
+  status: 'Held' | 'Confirmed' | 'Expired' | 'Cancelled'
+  totalPriceCents: number
+  expiresAt: string
+}
+
 export function searchRooms(city: string, checkIn: string, checkOut: string) {
   const params = new URLSearchParams({ city, checkIn, checkOut })
   return request<RoomTypeResult[]>(`/api/search?${params}`)
@@ -27,6 +38,12 @@ export function createBooking(roomTypeId: number, checkIn: string, checkOut: str
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ roomTypeId, checkIn, checkOut }),
+  })
+}
+
+export function listBookings(token: string) {
+  return request<BookingResult[]>('/api/bookings', {
+    headers: { Authorization: `Bearer ${token}` },
   })
 }
 

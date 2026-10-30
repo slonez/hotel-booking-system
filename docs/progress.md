@@ -6,7 +6,7 @@ Phase 4 — Core Implementation
 
 ## Next step
 
-Next: my bookings (FR-5), then cancellation (FR-14..16).
+Next: cancellation (FR-14..16). Refund amount calculated in Booking; the actual refund comes in Phase 5.
 
 ## Confirmed decisions
 
@@ -106,3 +106,4 @@ Next: my bookings (FR-5), then cancellation (FR-14..16).
 - 2026-10-30: Step 3b done: Clerk JWT auth, `POST /api/bookings`, rate limiting. 25 tests passing.
 - 2026-10-30: Step 4: React frontend (search, Clerk sign-in, booking). Verified in the browser with real Clerk sign-in.
 - 2026-10-30: Hold expiry job done. 26 tests passing; verified against the running service.
+- 2026-10-30: My bookings (FR-5) done: `ListBookings` gRPC, `GET /api/bookings`, frontend list. 30 tests passing.

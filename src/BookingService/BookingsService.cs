@@ -100,6 +100,37 @@ public class BookingsService(BookingDbContext db, TimeProvider time) : Bookings.
         };
     }
 
+    public override async Task<ListBookingsResponse> ListBookings(
+        ListBookingsRequest request, ServerCallContext context)
+    {
+        var now = time.GetUtcNow();
+        var bookings = await db.Bookings
+            .Where(b => b.ClerkUserId == request.ClerkUserId)
+            .OrderByDescending(b => b.CreatedAt)
+            .Select(b => new
+            {
+                b.Id, b.Status, b.CheckInDate, b.CheckOutDate, b.TotalPriceCents, b.ExpiresAt,
+                HotelName = b.RoomType.Hotel.Name,
+                RoomTypeName = b.RoomType.Name
+            })
+            .ToListAsync(context.CancellationToken);
+
+        var response = new ListBookingsResponse();
+        response.Bookings.AddRange(bookings.Select(b => new BookingSummary
+        {
+            BookingId = b.Id.ToString(),
+            HotelName = b.HotelName,
+            RoomTypeName = b.RoomTypeName,
+            CheckInDate = b.CheckInDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            CheckOutDate = b.CheckOutDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            // Same rule as availability: a hold past ExpiresAt is expired even before the job runs.
+            Status = (b.Status == BookingStatus.Held && b.ExpiresAt <= now ? BookingStatus.Expired : b.Status).ToString(),
+            TotalPriceCents = b.TotalPriceCents,
+            ExpiresAt = Timestamp.FromDateTimeOffset(b.ExpiresAt)
+        }));
+        return response;
+    }
+
     private (DateOnly CheckIn, DateOnly CheckOut) ParseStay(string checkInText, string checkOutText)
     {
         if (!TryParseDate(checkInText, out var checkIn) || !TryParseDate(checkOutText, out var checkOut))

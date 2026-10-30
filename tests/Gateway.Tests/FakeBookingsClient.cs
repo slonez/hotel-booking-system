@@ -10,6 +10,8 @@ public class FakeBookingsClient : Bookings.BookingsClient
     public SearchAvailabilityRequest? LastSearch { get; private set; }
     public SearchAvailabilityResponse SearchResponse { get; set; } = new();
     public CreateBookingRequest? LastCreate { get; private set; }
+    public ListBookingsRequest? LastList { get; private set; }
+    public ListBookingsResponse ListResponse { get; set; } = new();
     public RpcException? Error { get; set; }
 
     public override AsyncUnaryCall<SearchAvailabilityResponse> SearchAvailabilityAsync(
@@ -29,6 +31,13 @@ public class FakeBookingsClient : Bookings.BookingsClient
             TotalPriceCents = 25800,
             ExpiresAt = Timestamp.FromDateTimeOffset(new DateTimeOffset(2026, 11, 1, 12, 30, 0, TimeSpan.Zero))
         });
+    }
+
+    public override AsyncUnaryCall<ListBookingsResponse> ListBookingsAsync(
+        ListBookingsRequest request, CallOptions options)
+    {
+        LastList = request;
+        return Call(ListResponse);
     }
 
     private AsyncUnaryCall<T> Call<T>(T response) => new(
