@@ -14,7 +14,7 @@ public class SearchAvailabilityTests(BookingServiceFactory factory) : IClassFixt
 
     public async Task InitializeAsync()
     {
-        await using var db = CreateDbContext();
+        await using var db = factory.CreateDbContext();
         await db.Bookings.ExecuteDeleteAsync();
     }
 
@@ -110,11 +110,8 @@ public class SearchAvailabilityTests(BookingServiceFactory factory) : IClassFixt
 
     private async Task AddBookings(params Booking[] bookings)
     {
-        await using var db = CreateDbContext();
+        await using var db = factory.CreateDbContext();
         db.Bookings.AddRange(bookings);
         await db.SaveChangesAsync();
     }
-
-    private BookingDbContext CreateDbContext() =>
-        new(new DbContextOptionsBuilder<BookingDbContext>().UseNpgsql(factory.ConnectionString).Options);
 }

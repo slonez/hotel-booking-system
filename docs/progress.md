@@ -6,7 +6,7 @@ Phase 4 — Core Implementation
 
 ## Next step
 
-Step 2: `CreateBooking` with `SELECT ... FOR UPDATE` and a concurrency test (two parallel bookings for the last room).
+Step 3: decide next (hold expiry job, Gateway with REST, or cancellation).
 
 ## Confirmed decisions
 
@@ -54,6 +54,8 @@ Step 2: `CreateBooking` with `SELECT ... FOR UPDATE` and a concurrency test (two
 - Repo: monorepo, one solution (`HotelBooking.slnx`). One project per service, no layered architecture. Protos in `src/Contracts/Protos`.
 - .NET 10, PostgreSQL 18 in Docker Compose (host port 5433). Migrations applied at startup in Development.
 - Money stored as integer cents (EUR).
+- User identity (Clerk user ID, email) is passed in gRPC requests by the Gateway. Booking trusts the Gateway (internal network).
+- gRPC errors: unknown room type → `NotFound`, no rooms → `FailedPrecondition`, invalid input → `InvalidArgument`.
 - Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
@@ -94,3 +96,4 @@ Step 2: `CreateBooking` with `SELECT ... FOR UPDATE` and a concurrency test (two
 - 2026-10-30: Payment states, schema and events decided. Phase 3 complete. Phase 4 started.
 - 2026-10-30: Project brief mentoring style updated (recommend, then decide).
 - 2026-10-30: Step 1 done: Booking Service with schema, seed data, `SearchAvailability` gRPC, 9 integration tests passing.
+- 2026-10-30: Step 2 done: `CreateBooking` with row lock. Concurrency test (10 parallel requests, 1 room) passes; without the lock it fails.

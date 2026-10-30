@@ -4,8 +4,11 @@ option csharp_namespace = "HotelBooking.Contracts.Booking";
 
 package booking;
 
+import "google/protobuf/timestamp.proto";
+
 service Bookings {
   rpc SearchAvailability (SearchAvailabilityRequest) returns (SearchAvailabilityResponse);
+  rpc CreateBooking (CreateBookingRequest) returns (CreateBookingResponse);
 }
 
 message SearchAvailabilityRequest {
@@ -28,4 +31,19 @@ message RoomTypeAvailability {
   int64 price_per_night_cents = 5;
   int64 total_price_cents = 6;
   int32 available_rooms = 7;
+}
+
+message CreateBookingRequest {
+  int32 room_type_id = 1;
+  string check_in_date = 2;
+  string check_out_date = 3;
+  // Taken from the JWT by the Gateway.
+  string clerk_user_id = 4;
+  string email = 5;
+}
+
+message CreateBookingResponse {
+  string booking_id = 1;
+  int64 total_price_cents = 2;
+  google.protobuf.Timestamp expires_at = 3;
 }

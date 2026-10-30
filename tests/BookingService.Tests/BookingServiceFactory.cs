@@ -1,7 +1,9 @@
+using BookingService.Data;
 using Grpc.Net.Client;
 using HotelBooking.Contracts.Booking;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Testcontainers.PostgreSql;
@@ -29,6 +31,9 @@ public class BookingServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
             new GrpcChannelOptions { HttpHandler = Server.CreateHandler() });
         return new Bookings.BookingsClient(channel);
     }
+
+    public BookingDbContext CreateDbContext() =>
+        new(new DbContextOptionsBuilder<BookingDbContext>().UseNpgsql(ConnectionString).Options);
 
     public Task InitializeAsync() => _postgres.StartAsync();
 
