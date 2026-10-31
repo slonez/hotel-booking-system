@@ -91,7 +91,7 @@ No `Failed` state for payments: in Stripe Checkout the customer can retry with a
 
 ```
 Payments
-  Id, BookingId (unique), StripeSessionId (unique), CheckoutUrl, Amount, Status, CreatedAt
+  Id, BookingId (unique), StripeSessionId (unique), CheckoutUrl, StripePaymentIntentId, Amount, Status, CreatedAt
 
 Refunds
   Id, PaymentId (unique), Amount, Reason, Status, Attempts, StripeRefundId, CreatedAt
@@ -105,6 +105,7 @@ OutboxMessages
 - Stripe webhooks are idempotent through the state change (`WHERE StripeSessionId = X AND Status = 'Pending'`), not a processed-events table: a duplicate or late event changes no row. Events: `checkout.session.completed` (when `payment_status = paid`) and `checkout.session.async_payment_succeeded` → Succeeded, `checkout.session.expired` → Expired. Others and unknown sessions → 200, ignored. Invalid signature → 400.
 - `PaymentId` unique on refunds: a duplicate `RefundRequested` event cannot create a second refund.
 - `Refund.Id` is the Stripe idempotency key, so retries cannot refund twice in Stripe.
+- `RefundRequested` is consumed from queue `payment.refund-requested`; the handler only saves a Pending refund (ignored if the payment is not Succeeded or the amount is not within the paid amount). `RefundProcessor` (every minute) calls Stripe with the payment intent; after 5 failed attempts → Failed (manual). A refund Stripe accepts is marked Succeeded; `refund.failed` webhooks are not handled yet.
 
 ## Events
 

@@ -52,7 +52,9 @@ public static class StripeWebhook
         // Idempotent: only a Pending payment changes, so duplicate or late events do nothing.
         var updated = await db.Payments
             .Where(p => p.StripeSessionId == session.Id && p.Status == PaymentStatus.Pending)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, newStatus.Value), ct);
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.Status, newStatus.Value)
+                .SetProperty(p => p.StripePaymentIntentId, session.PaymentIntentId), ct);
 
         if (updated == 0)
         {

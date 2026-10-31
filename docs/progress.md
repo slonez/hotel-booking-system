@@ -6,7 +6,7 @@ Phase 5 — Payment Integration
 
 ## Next step
 
-Phase 5 step 4c: Payment consumes it into `Refunds` and `RefundProcessor` refunds through Stripe (idempotency key = Refund.Id, max 5 attempts → Failed); webhook stores `PaymentIntentId`.
+Phase 5 review: walk through payment flow and failure scenarios from the project brief, decide what to improve before Phase 6.
 
 ## Confirmed decisions
 
@@ -135,3 +135,4 @@ Phase 5 step 4c: Payment consumes it into `Refunds` and `RefundProcessor` refund
 - 2026-10-31: Phase 5 step 4 plan: shared `src/Messaging` library, refunds via background job.
 - 2026-10-31: Phase 5 step 4a done: outbox publisher and consumer moved to `src/Messaging`; no behavior or schema change. 86 tests passing.
 - 2026-10-31: Phase 5 step 4b done: Booking outbox; cancellation and late payment without room publish `RefundRequested` (reason `Cancelled`/`LatePayment`). 86 tests passing.
+- 2026-10-31: Phase 5 step 4c done: Payment consumes `RefundRequested` into `Refunds`, `RefundProcessor` refunds through Stripe (idempotency key = refund ID, 5 attempts → Failed); webhook stores `StripePaymentIntentId`. 93 tests passing.

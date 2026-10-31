@@ -56,6 +56,7 @@ public class StripeWebhookTests(PaymentServiceFactory factory) : IAsyncLifetime
 
         await using var db = factory.CreateDbContext();
         var payment = await db.Payments.SingleAsync();
+        Assert.Equal("pi_test_1", payment.StripePaymentIntentId);
         var message = await db.OutboxMessages.SingleAsync();
         Assert.Equal(PaymentSucceeded.RoutingKey, message.Type);
         Assert.Null(message.PublishedAt);
@@ -136,7 +137,7 @@ public class StripeWebhookTests(PaymentServiceFactory factory) : IAsyncLifetime
             @object = "event",
             api_version = StripeConfiguration.ApiVersion,
             type,
-            data = new { @object = new { id = sessionId, @object = "checkout.session", payment_status = paymentStatus } }
+            data = new { @object = new { id = sessionId, @object = "checkout.session", payment_status = paymentStatus, payment_intent = "pi_test_1" } }
         });
 
     private async Task<PaymentStatus> GetStatus()

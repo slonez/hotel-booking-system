@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using PaymentService.Data;
+using Stripe;
 using Stripe.Checkout;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
@@ -37,6 +38,8 @@ public class PaymentServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
 
     // Replaced before each test so tests don't see each other's Stripe calls.
     public FakeSessionService Sessions { get; private set; } = new();
+    // RefundProcessor is a singleton, so this fake is reset instead of replaced.
+    public FakeRefundService Refunds { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -47,6 +50,7 @@ public class PaymentServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
         {
             services.AddSingleton<TimeProvider>(Time);
             services.AddScoped<SessionService>(_ => Sessions);
+            services.AddSingleton<RefundService>(Refunds);
         });
     }
 
@@ -63,7 +67,9 @@ public class PaymentServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
     public async Task ResetAsync()
     {
         Sessions = new FakeSessionService();
+        Refunds.Reset();
         await using var db = CreateDbContext();
+        await db.Refunds.ExecuteDeleteAsync();
         await db.Payments.ExecuteDeleteAsync();
         await db.OutboxMessages.ExecuteDeleteAsync();
     }
