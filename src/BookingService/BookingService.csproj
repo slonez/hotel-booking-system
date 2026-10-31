@@ -9,6 +9,7 @@
   <ItemGroup>
     <Protobuf Include="..\Contracts\Protos\booking.proto" GrpcServices="Both" Link="Protos\booking.proto" />
     <Protobuf Include="..\Contracts\Protos\payment.proto" GrpcServices="Client" Link="Protos\payment.proto" />
+    <Compile Include="..\Contracts\Events\*.cs" LinkBase="Contracts\Events" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +21,7 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="RabbitMQ.Client" Version="7.2.2" />
   </ItemGroup>
 
 </Project>

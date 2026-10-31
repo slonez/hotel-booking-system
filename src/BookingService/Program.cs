@@ -16,6 +16,8 @@ builder.Services.AddGrpcClient<Payments.PaymentsClient>(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HoldExpiryJob>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HoldExpiryJob>());
+builder.Services.AddScoped<PaymentSucceededHandler>();
+builder.Services.AddHostedService<PaymentSucceededConsumer>();
 
 var app = builder.Build();
 

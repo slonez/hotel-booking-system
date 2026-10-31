@@ -6,7 +6,7 @@ Phase 5 — Payment Integration
 
 ## Next step
 
-Phase 5 step 3b: `PaymentSucceeded` consumer in Booking (declares durable queue `booking.payment-succeeded`; Held/Expired → Confirmed with room type lock; ack after processing; failures requeued after a delay, DLQ in Phase 6).
+Phase 5 step 4: late payment without room and cancellation publish `RefundRequested` (outbox in Booking); Payment consumes it and refunds through Stripe.
 
 ## Confirmed decisions
 
@@ -74,6 +74,7 @@ Phase 5 step 3b: `PaymentSucceeded` consumer in Booking (declares durable queue 
 - Stripe webhook: `POST /stripe/webhook` on a separate HTTP/1.1 port (5243); gRPC stays HTTP/2 on 5242. Signature checked with `EventUtility.ConstructEvent`; secret in user secrets. Local testing with `stripe listen`.
 - Messaging: `RabbitMQ.Client` 7 + own small outbox (not MassTransit), to see how at-least-once works. RabbitMQ 4 in Docker Compose.
 - Outbox (Payment): `OutboxMessages` saved in the webhook transaction only when the payment actually changed to Succeeded. `OutboxPublisher` publishes every second with publisher confirms, marks each message after its confirm.
+- Booking consumer: `PaymentSucceededConsumer` (RabbitMQ, durable queue `booking.payment-succeeded`, prefetch 1, ack after handling, requeue after 5 s on error) + `PaymentSucceededHandler` (logic, tested directly). Late payment re-checks availability under the room type lock.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
 
@@ -130,3 +131,4 @@ Phase 5 step 3b: `PaymentSucceeded` consumer in Booking (declares durable queue 
 - 2026-10-31: Webhook idempotency changed to state-based (no `ProcessedStripeEvents` table): the atomic `WHERE Status = 'Pending'` update already ignores duplicates.
 - 2026-10-31: Phase 5 step 2 done: Stripe webhook (signature check, completed/expired → Succeeded/Expired). 74 tests passing.
 - 2026-10-31: Phase 5 step 3a done: RabbitMQ in compose, transactional outbox and `OutboxPublisher` in Payment, `PaymentSucceeded` event. 78 tests passing (publisher tested against real RabbitMQ).
+- 2026-10-31: Phase 5 step 3b done: Booking consumes `PaymentSucceeded` and confirms bookings (incl. late payment when a room is free). 86 tests passing, consumer tested through real RabbitMQ.
