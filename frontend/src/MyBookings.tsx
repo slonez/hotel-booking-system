@@ -3,10 +3,11 @@ import { euros } from './format'
 
 type Props = {
   bookings: BookingResult[]
+  onPay: (bookingId: string) => void
   onCancel: (bookingId: string) => void
 }
 
-export default function MyBookings({ bookings, onCancel }: Props) {
+export default function MyBookings({ bookings, onPay, onCancel }: Props) {
   if (bookings.length === 0) return <p>No bookings yet.</p>
 
   return (
@@ -35,7 +36,10 @@ export default function MyBookings({ bookings, onCancel }: Props) {
               {b.status === 'Held' && ` until ${new Date(b.expiresAt).toLocaleTimeString('fi-FI')}`}
               {b.refundAmountCents !== null && `, refund ${euros(b.refundAmountCents)}`}
             </td>
-            <td>{b.status === 'Confirmed' && <button onClick={() => onCancel(b.bookingId)}>Cancel</button>}</td>
+            <td>
+              {b.status === 'Held' && <button onClick={() => onPay(b.bookingId)}>Pay</button>}
+              {b.status === 'Confirmed' && <button onClick={() => onCancel(b.bookingId)}>Cancel</button>}
+            </td>
           </tr>
         ))}
       </tbody>

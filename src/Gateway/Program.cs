@@ -105,6 +105,21 @@ app.MapPost("/api/bookings/{bookingId}/cancel", async (string bookingId, ClaimsP
 })
 .RequireAuthorization();
 
+// Creating a Stripe session can be slow, so this call gets a longer deadline than the default.
+// Booking passes the deadline on to Payment Service.
+app.MapPost("/api/bookings/{bookingId}/checkout", async (string bookingId, ClaimsPrincipal user,
+    Bookings.BookingsClient bookings, CancellationToken ct) =>
+{
+    var response = await bookings.StartPaymentAsync(new StartPaymentRequest
+    {
+        BookingId = bookingId,
+        ClerkUserId = user.FindFirstValue("sub")!
+    }, deadline: DateTime.UtcNow.AddSeconds(15), cancellationToken: ct);
+
+    return new CheckoutStarted(response.CheckoutUrl);
+})
+.RequireAuthorization();
+
 app.Run();
 
 record RoomTypeResult(
@@ -132,3 +147,5 @@ record BookingResult(
     long? RefundAmountCents);
 
 record BookingCancelled(long RefundAmountCents);
+
+record CheckoutStarted(string CheckoutUrl);

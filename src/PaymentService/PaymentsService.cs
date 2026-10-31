@@ -3,6 +3,7 @@ using HotelBooking.Contracts.Payment;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using PaymentService.Data;
+using Stripe;
 using Stripe.Checkout;
 
 namespace PaymentService;
@@ -11,7 +12,8 @@ public class PaymentsService(
     PaymentDbContext db,
     SessionService sessions,
     TimeProvider time,
-    IConfiguration config) : Payments.PaymentsBase
+    IConfiguration config,
+    ILogger<PaymentsService> logger) : Payments.PaymentsBase
 {
     // Stripe's minimum. The hold can expire before the session; late payment handles that (FR-12).
     private static readonly TimeSpan SessionLifetime = TimeSpan.FromMinutes(30);
@@ -30,7 +32,7 @@ public class PaymentsService(
             return Respond(existing);
 
         var now = time.GetUtcNow();
-        var session = await sessions.CreateAsync(new SessionCreateOptions
+        var session = await CreateStripeSession(new SessionCreateOptions
         {
             Mode = "payment",
             ClientReferenceId = bookingId.ToString(),
@@ -51,7 +53,7 @@ public class PaymentsService(
                     }
                 }
             ]
-        }, cancellationToken: ct);
+        }, ct);
 
         var payment = new Payment
         {
@@ -78,6 +80,20 @@ public class PaymentsService(
         }
 
         return Respond(payment);
+    }
+
+    private async Task<Session> CreateStripeSession(SessionCreateOptions options, CancellationToken ct)
+    {
+        try
+        {
+            return await sessions.CreateAsync(options, cancellationToken: ct);
+        }
+        catch (StripeException ex)
+        {
+            // Details may reveal our Stripe setup, so the caller only gets a generic error.
+            logger.LogError(ex, "Creating Stripe checkout session for booking {BookingId} failed", options.ClientReferenceId);
+            throw new RpcException(new Status(StatusCode.Unavailable, "Payment provider is unavailable."));
+        }
     }
 
     private Task<Payment?> FindPayment(Guid bookingId, CancellationToken ct) =>

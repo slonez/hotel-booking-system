@@ -130,9 +130,11 @@ gRPC contracts live in `src/Contracts/Protos`. REST endpoints are in the Gateway
 | `POST /api/bookings` `{ roomTypeId, checkIn, checkOut }` | Yes | `CreateBooking` |
 | `GET /api/bookings` | Yes | `ListBookings` |
 | `POST /api/bookings/{id}/cancel` | Yes | `CancelBooking` |
+| `POST /api/bookings/{id}/checkout` → `{ checkoutUrl }` | Yes | `StartPayment` → Payment `CreateCheckoutSession` |
 
 - `GET /api/bookings` returns only the signed-in user's bookings, newest first. The user ID comes from the token (NFR-6). A hold past `ExpiresAt` is shown as `Expired` even before the expiry job runs.
 
+- `POST /api/bookings/{id}/checkout` works only for the user's own booking on hold (`Held`, not past `ExpiresAt`), otherwise 409. Calling again returns the same URL. It has a 15 s deadline (Stripe can be slow), which Booking passes on to Payment. Stripe errors → 503.
 - Auth: Clerk session token as `Authorization: Bearer`. Gateway validates it against Clerk's keys and passes `sub` and `email` claims to Booking.
 - `POST /api/bookings` requires the `email` claim (added to the session token in the Clerk dashboard); without it → 403.
 - Rate limit: fixed window per client IP, 100 requests/min by default (`RateLimit:RequestsPerMinute`), 429 when exceeded.

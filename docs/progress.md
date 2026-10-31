@@ -6,7 +6,7 @@ Phase 5 — Payment Integration
 
 ## Next step
 
-Phase 5 step 1b: Booking `StartPayment` → Payment, `POST /api/bookings/{id}/checkout`, frontend redirect to Stripe and Pay button for held bookings. Needs a Stripe test secret key in user secrets.
+Phase 5 step 2: Stripe webhook in Payment Service (signature verification, processed event IDs, Payment → Succeeded/Expired).
 
 ## Confirmed decisions
 
@@ -69,6 +69,8 @@ Phase 5 step 1b: Booking `StartPayment` → Payment, `POST /api/bookings/{id}/ch
 - Checkout session expires 30 min after creation (Stripe minimum), so it can outlive the hold; paying after hold expiry is a late payment.
 - Checkout idempotency via unique `Payments.BookingId`, not a Stripe idempotency key (parameters differ per call). Extra sessions from races are never shown and expire unpaid.
 - Payment Service: gRPC on port 5242, `payment` database. Stripe secret key in user secrets. Tests replace Stripe's `SessionService` with a fake.
+- Booking → Payment gRPC uses `EnableCallContextPropagation()`: the Gateway's deadline (15 s for checkout) and cancellation flow through. Payment errors pass through Booking unchanged. Stripe errors → `Unavailable` (generic message, details logged).
+- Frontend: after booking, redirects to Stripe Checkout. Held bookings have a Pay button. Stripe returns to `/?payment=success|cancelled`; booking stays Held until the webhook flow (steps 2–3).
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
 
@@ -121,3 +123,4 @@ Phase 5 step 1b: Booking `StartPayment` → Payment, `POST /api/bookings/{id}/ch
 - 2026-10-30: Phase 5 started.
 - 2026-10-31: Phase 5 decisions: Stripe Checkout, RabbitMQ + outbox in Phase 5.
 - 2026-10-31: Phase 5 step 1a done: Payment Service with `CreateCheckoutSession` (Stripe Checkout, idempotent per booking). 7 tests passing; concurrency test fails without the unique-violation handling.
+- 2026-10-31: Phase 5 step 1b done: `StartPayment`, `POST /api/bookings/{id}/checkout`, Stripe redirect and Pay button. 66 tests passing; verified against real Stripe test mode with grpcurl.

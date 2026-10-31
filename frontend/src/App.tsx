@@ -5,6 +5,7 @@ import {
   createBooking,
   listBookings,
   searchRooms,
+  startCheckout,
   type BookingCreated,
   type BookingResult,
   type RoomTypeResult,
@@ -13,6 +14,13 @@ import { euros } from './format'
 import MyBookings from './MyBookings'
 
 type Stay = { city: string; checkIn: string; checkOut: string }
+
+// Stripe redirects back to this page with ?payment=success or ?payment=cancelled.
+const paymentMessages: Record<string, string> = {
+  success: 'Payment received. Your booking will be confirmed shortly.',
+  cancelled: 'Payment cancelled. You can pay from My bookings while the room is on hold.',
+}
+const paymentResult = new URLSearchParams(window.location.search).get('payment')
 
 export default function App() {
   const { getToken, isSignedIn } = useAuth()
@@ -23,6 +31,12 @@ export default function App() {
   const [booking, setBooking] = useState<BookingCreated | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [myBookings, setMyBookings] = useState<BookingResult[]>([])
+  const paymentMessage = paymentResult ? paymentMessages[paymentResult] : undefined
+
+  // Remove ?payment=... so a page reload does not show the message again.
+  useEffect(() => {
+    if (paymentResult) window.history.replaceState(null, '', window.location.pathname)
+  }, [])
 
   const loadMyBookings = useCallback(async () => {
     try {
@@ -58,14 +72,25 @@ export default function App() {
     })
   }
 
+  async function goToCheckout(bookingId: string) {
+    const token = await getToken()
+    const { checkoutUrl } = await startCheckout(bookingId, token!)
+    window.location.assign(checkoutUrl)
+  }
+
+  // If starting the payment fails, the room stays on hold and the user can pay from My bookings.
   const book = (roomTypeId: number) =>
     run(async () => {
       const stay = searched!
       const token = await getToken()
-      setBooking(await createBooking(roomTypeId, stay.checkIn, stay.checkOut, token!))
+      const created = await createBooking(roomTypeId, stay.checkIn, stay.checkOut, token!)
+      setBooking(created)
       setResults(await searchRooms(stay.city, stay.checkIn, stay.checkOut))
       await loadMyBookings()
+      await goToCheckout(created.bookingId)
     })
+
+  const pay = (bookingId: string) => run(() => goToCheckout(bookingId))
 
   const cancel = (bookingId: string) => {
     if (!confirm('Cancel this booking? Less than 24 h before check-in you get a 50% refund.')) return
@@ -104,6 +129,7 @@ export default function App() {
         <button type="submit">Search</button>
       </form>
 
+      {paymentMessage && <p className="success">{paymentMessage}</p>}
       {error && <p className="error">{error}</p>}
 
       {booking && (
@@ -158,7 +184,7 @@ export default function App() {
 
       <Show when="signed-in">
         <h2>My bookings</h2>
-        <MyBookings bookings={myBookings} onCancel={cancel} />
+        <MyBookings bookings={myBookings} onPay={pay} onCancel={cancel} />
       </Show>
     </main>
   )

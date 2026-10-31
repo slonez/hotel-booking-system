@@ -3,11 +3,12 @@ using BookingService.Data;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using HotelBooking.Contracts.Booking;
+using HotelBooking.Contracts.Payment;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookingService;
 
-public class BookingsService(BookingDbContext db, TimeProvider time) : Bookings.BookingsBase
+public class BookingsService(BookingDbContext db, Payments.PaymentsClient payments, TimeProvider time) : Bookings.BookingsBase
 {
     private const int MaxNights = 30;
     private static readonly TimeSpan HoldDuration = TimeSpan.FromMinutes(30);
@@ -123,8 +124,8 @@ public class BookingsService(BookingDbContext db, TimeProvider time) : Bookings.
                 BookingId = b.Id.ToString(),
                 HotelName = b.HotelName,
                 RoomTypeName = b.RoomTypeName,
-                CheckInDate = b.CheckInDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                CheckOutDate = b.CheckOutDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                CheckInDate = FormatDate(b.CheckInDate),
+                CheckOutDate = FormatDate(b.CheckOutDate),
                 // Same rule as availability: a hold past ExpiresAt is expired even before the job runs.
                 Status = (b.Status == BookingStatus.Held && b.ExpiresAt <= now ? BookingStatus.Expired : b.Status).ToString(),
                 TotalPriceCents = b.TotalPriceCents,
@@ -144,14 +145,7 @@ public class BookingsService(BookingDbContext db, TimeProvider time) : Bookings.
         var ct = context.CancellationToken;
         var now = time.GetUtcNow();
 
-        // Another user's booking looks the same as a missing one, so its existence is not revealed (NFR-6).
-        var booking = Guid.TryParse(request.BookingId, out var id)
-            ? await db.Bookings
-                .Include(b => b.RoomType).ThenInclude(rt => rt.Hotel)
-                .SingleOrDefaultAsync(b => b.Id == id && b.ClerkUserId == request.ClerkUserId, ct)
-            : null;
-        if (booking is null)
-            throw new RpcException(new Status(StatusCode.NotFound, "Booking not found."));
+        var booking = await FindOwnBooking(request.BookingId, request.ClerkUserId, ct);
         if (booking.Status != BookingStatus.Confirmed)
             throw new RpcException(new Status(StatusCode.FailedPrecondition, "Only confirmed bookings can be cancelled."));
 
@@ -172,6 +166,38 @@ public class BookingsService(BookingDbContext db, TimeProvider time) : Bookings.
         return new CancelBookingResponse { RefundAmountCents = refund };
     }
 
+    public override async Task<StartPaymentResponse> StartPayment(
+        StartPaymentRequest request, ServerCallContext context)
+    {
+        var booking = await FindOwnBooking(request.BookingId, request.ClerkUserId, context.CancellationToken);
+        if (booking.Status != BookingStatus.Held || booking.ExpiresAt <= time.GetUtcNow())
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "Only bookings on hold can be paid."));
+
+        // Deadline and cancellation come from this request (call context propagation).
+        // Errors from Payment Service, such as Unavailable, are passed on to the caller as they are.
+        var response = await payments.CreateCheckoutSessionAsync(new CreateCheckoutSessionRequest
+        {
+            BookingId = booking.Id.ToString(),
+            AmountCents = booking.TotalPriceCents,
+            Description = $"{booking.RoomType.Hotel.Name}, {booking.RoomType.Name}, " +
+                $"{FormatDate(booking.CheckInDate)} – {FormatDate(booking.CheckOutDate)}",
+            CustomerEmail = booking.Email
+        });
+
+        return new StartPaymentResponse { CheckoutUrl = response.CheckoutUrl };
+    }
+
+    // Another user's booking looks the same as a missing one, so its existence is not revealed (NFR-6).
+    private async Task<Booking> FindOwnBooking(string bookingId, string clerkUserId, CancellationToken ct)
+    {
+        var booking = Guid.TryParse(bookingId, out var id)
+            ? await db.Bookings
+                .Include(b => b.RoomType).ThenInclude(rt => rt.Hotel)
+                .SingleOrDefaultAsync(b => b.Id == id && b.ClerkUserId == clerkUserId, ct)
+            : null;
+        return booking ?? throw new RpcException(new Status(StatusCode.NotFound, "Booking not found."));
+    }
+
     private (DateOnly CheckIn, DateOnly CheckOut) ParseStay(string checkInText, string checkOutText)
     {
         if (!TryParseDate(checkInText, out var checkIn) || !TryParseDate(checkOutText, out var checkOut))
@@ -188,6 +214,9 @@ public class BookingsService(BookingDbContext db, TimeProvider time) : Bookings.
 
     private static bool TryParseDate(string text, out DateOnly date) =>
         DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+
+    private static string FormatDate(DateOnly date) =>
+        date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static RpcException InvalidArgument(string message) =>
         new(new Status(StatusCode.InvalidArgument, message));

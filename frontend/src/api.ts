@@ -55,6 +55,13 @@ export function cancelBooking(bookingId: string, token: string) {
   })
 }
 
+export function startCheckout(bookingId: string, token: string) {
+  return request<{ checkoutUrl: string }>(`/api/bookings/${bookingId}/checkout`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
 // Errors from the Gateway are ProblemDetails JSON. Rate limit (429) responses have no body.
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)

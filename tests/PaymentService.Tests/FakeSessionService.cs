@@ -11,9 +11,13 @@ public class FakeSessionService : SessionService
 
     public ConcurrentQueue<SessionCreateOptions> Created { get; } = new();
 
+    public StripeException? Error { get; set; }
+
     public override async Task<Session> CreateAsync(
         SessionCreateOptions options, RequestOptions? requestOptions = null, CancellationToken cancellationToken = default)
     {
+        if (Error is not null)
+            throw Error;
         Created.Enqueue(options);
         // Like a real network call, so concurrent requests overlap.
         await Task.Delay(50, cancellationToken);

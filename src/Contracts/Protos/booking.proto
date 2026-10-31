@@ -11,6 +11,8 @@ service Bookings {
   rpc CreateBooking (CreateBookingRequest) returns (CreateBookingResponse);
   rpc ListBookings (ListBookingsRequest) returns (ListBookingsResponse);
   rpc CancelBooking (CancelBookingRequest) returns (CancelBookingResponse);
+  // Returns the Stripe checkout URL for a booking on hold. Safe to call again.
+  rpc StartPayment (StartPaymentRequest) returns (StartPaymentResponse);
 }
 
 message SearchAvailabilityRequest {
@@ -79,4 +81,13 @@ message CancelBookingRequest {
 
 message CancelBookingResponse {
   int64 refund_amount_cents = 1;
+}
+
+message StartPaymentRequest {
+  string booking_id = 1;
+  string clerk_user_id = 2;
+}
+
+message StartPaymentResponse {
+  string checkout_url = 1;
 }

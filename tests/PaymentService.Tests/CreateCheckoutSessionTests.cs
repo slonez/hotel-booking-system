@@ -2,6 +2,7 @@ using Grpc.Core;
 using HotelBooking.Contracts.Payment;
 using Microsoft.EntityFrameworkCore;
 using PaymentService.Data;
+using Stripe;
 
 namespace PaymentService.Tests;
 
@@ -54,6 +55,19 @@ public class CreateCheckoutSessionTests(PaymentServiceFactory factory) : IAsyncL
         Assert.Single(responses.Select(r => r.CheckoutUrl).Distinct());
         await using var db = factory.CreateDbContext();
         Assert.Equal(1, await db.Payments.CountAsync());
+    }
+
+    [Fact]
+    public async Task Stripe_error_is_reported_as_unavailable_without_saving_a_payment()
+    {
+        factory.Sessions.Error = new StripeException("Invalid API Key provided");
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() => CreateSession());
+
+        Assert.Equal(StatusCode.Unavailable, ex.StatusCode);
+        Assert.DoesNotContain("API Key", ex.Status.Detail);
+        await using var db = factory.CreateDbContext();
+        Assert.False(await db.Payments.AnyAsync());
     }
 
     [Theory]

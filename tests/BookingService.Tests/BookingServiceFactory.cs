@@ -2,8 +2,10 @@ using System.Globalization;
 using BookingService.Data;
 using Grpc.Net.Client;
 using HotelBooking.Contracts.Booking;
+using HotelBooking.Contracts.Payment;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -28,10 +30,13 @@ public class BookingServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
 
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero));
 
+    public FakePaymentsClient Payments { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:BookingDb", ConnectionString);
         builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(Time));
+        builder.ConfigureTestServices(services => services.AddSingleton<Payments.PaymentsClient>(Payments));
     }
 
     public Bookings.BookingsClient CreateGrpcClient()
