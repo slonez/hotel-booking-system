@@ -114,7 +114,7 @@ All events go through the outbox (at-least-once). Consumers are idempotent.
 - RabbitMQ: one durable topic exchange `hotel-booking`; routing key = event type (`payment.succeeded`). Persistent messages, `MessageId` = outbox `Id`. Each consumer declares its own durable queue. A message published before any queue is bound is dropped.
 - Booking consumes `payment.succeeded` from durable queue `booking.payment-succeeded` (prefetch 1, ack after handling). On error the message is requeued after 5 s; retry limit and dead letter queue come in Phase 6.
 - `PaymentSucceeded` handling: Held with a valid hold → Confirmed. Held past `ExpiresAt` or Expired → availability checked again under the room type lock (`FOR UPDATE`); room free → Confirmed, otherwise stays Expired (refund in step 4). Confirmed/Cancelled → ignored (duplicate). Final update uses `WHERE Status IN (Held, Expired)`.
-- Event payload records live in `src/Contracts/Events` (linked into each service like the protos).
+- Event payload records live in `src/Contracts/Events` (linked into each service like the protos). Outbox publisher and consumer code is shared through `src/Messaging`.
 
 | Event | Publisher | Consumers | Payload |
 |---|---|---|---|

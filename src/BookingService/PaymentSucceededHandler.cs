@@ -1,5 +1,6 @@
 using BookingService.Data;
 using HotelBooking.Contracts.Events;
+using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookingService;
@@ -7,7 +8,10 @@ namespace BookingService;
 // Confirms a booking when its payment succeeds. Messages can arrive more than once and late,
 // so the handler is idempotent and checks availability again for late payments.
 public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILogger<PaymentSucceededHandler> logger)
+    : IEventHandler<PaymentSucceeded>
 {
+    public const string Queue = "booking.payment-succeeded";
+
     public async Task HandleAsync(PaymentSucceeded message, CancellationToken ct)
     {
         var now = time.GetUtcNow();

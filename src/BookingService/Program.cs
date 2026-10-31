@@ -1,6 +1,8 @@
 using BookingService;
 using BookingService.Data;
+using HotelBooking.Contracts.Events;
 using HotelBooking.Contracts.Payment;
+using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,8 +18,8 @@ builder.Services.AddGrpcClient<Payments.PaymentsClient>(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HoldExpiryJob>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HoldExpiryJob>());
-builder.Services.AddScoped<PaymentSucceededHandler>();
-builder.Services.AddHostedService<PaymentSucceededConsumer>();
+builder.Services.AddEventConsumer<PaymentSucceeded, PaymentSucceededHandler>(
+    PaymentSucceededHandler.Queue, PaymentSucceeded.RoutingKey);
 
 var app = builder.Build();
 

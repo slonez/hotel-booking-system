@@ -1,4 +1,4 @@
-namespace HotelBooking.Contracts.Events;
+namespace HotelBooking.Messaging;
 
 public static class Exchanges
 {

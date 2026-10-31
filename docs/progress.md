@@ -6,7 +6,7 @@ Phase 5 — Payment Integration
 
 ## Next step
 
-Phase 5 step 4: late payment without room and cancellation publish `RefundRequested` (outbox in Booking); Payment consumes it and refunds through Stripe.
+Phase 5 step 4b: Booking publishes `RefundRequested` (outbox) on cancellation and on late payment without a room. Then 4c: Payment consumes it into `Refunds` and `RefundProcessor` refunds through Stripe (idempotency key = Refund.Id, max 5 attempts → Failed); webhook stores `PaymentIntentId`.
 
 ## Confirmed decisions
 
@@ -51,7 +51,8 @@ Phase 5 step 4: late payment without room and cancellation publish `RefundReques
 - Payment schema: Payments (BookingId unique), Refunds (PaymentId unique, own table), OutboxMessages.
 - Events: `PaymentSucceeded`, `BookingConfirmed`, `RefundRequested` (see `docs/data-and-api-design.md`).
 - gRPC/REST contracts are defined in Phase 4 per service, not upfront.
-- Repo: monorepo, one solution (`HotelBooking.slnx`). One project per service, no layered architecture. Protos in `src/Contracts/Protos`.
+- Repo: monorepo, one solution (`HotelBooking.slnx`). One project per service, no layered architecture. Protos in `src/Contracts/Protos`, event records in `src/Contracts/Events` (both linked into services).
+- Shared library `src/Messaging` (`HotelBooking.Messaging`) for technical messaging code only, no domain logic: `OutboxMessage` + `ConfigureOutbox()`, `OutboxPublisher<TContext>`, `EventConsumer<TEvent, THandler>` with `IEventHandler<TEvent>`. Registered with `AddOutboxPublisher<TContext>()` and `AddEventConsumer<TEvent, THandler>(queue, routingKey)`.
 - .NET 10, PostgreSQL 18 in Docker Compose (host port 5433). Migrations applied at startup in Development.
 - Money stored as integer cents (EUR).
 - User identity (Clerk user ID, email) is passed in gRPC requests by the Gateway. Booking trusts the Gateway (internal network).
@@ -75,6 +76,7 @@ Phase 5 step 4: late payment without room and cancellation publish `RefundReques
 - Messaging: `RabbitMQ.Client` 7 + own small outbox (not MassTransit), to see how at-least-once works. RabbitMQ 4 in Docker Compose.
 - Outbox (Payment): `OutboxMessages` saved in the webhook transaction only when the payment actually changed to Succeeded. `OutboxPublisher` publishes every second with publisher confirms, marks each message after its confirm.
 - Booking consumer: `PaymentSucceededConsumer` (RabbitMQ, durable queue `booking.payment-succeeded`, prefetch 1, ack after handling, requeue after 5 s on error) + `PaymentSucceededHandler` (logic, tested directly). Late payment re-checks availability under the room type lock.
+- Refunds: `RefundRequested` consumer only saves a Pending `Refunds` row (unique `PaymentId` stops duplicates, also from repeated late-payment messages where booking state does not change). A separate `RefundProcessor` job calls Stripe.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
 
@@ -132,3 +134,5 @@ Phase 5 step 4: late payment without room and cancellation publish `RefundReques
 - 2026-10-31: Phase 5 step 2 done: Stripe webhook (signature check, completed/expired → Succeeded/Expired). 74 tests passing.
 - 2026-10-31: Phase 5 step 3a done: RabbitMQ in compose, transactional outbox and `OutboxPublisher` in Payment, `PaymentSucceeded` event. 78 tests passing (publisher tested against real RabbitMQ).
 - 2026-10-31: Phase 5 step 3b done: Booking consumes `PaymentSucceeded` and confirms bookings (incl. late payment when a room is free). 86 tests passing, consumer tested through real RabbitMQ.
+- 2026-10-31: Phase 5 step 4 plan: shared `src/Messaging` library, refunds via background job.
+- 2026-10-31: Phase 5 step 4a done: outbox publisher and consumer moved to `src/Messaging`; no behavior or schema change. 86 tests passing.

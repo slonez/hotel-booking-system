@@ -1,4 +1,5 @@
 using HotelBooking.Contracts.Events;
+using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 using PaymentService.Data;
 using Stripe;

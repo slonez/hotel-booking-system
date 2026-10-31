@@ -1,18 +1,29 @@
 using System.Text.Json;
-using HotelBooking.Contracts.Events;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-namespace BookingService;
+namespace HotelBooking.Messaging;
 
-// Reads PaymentSucceeded events from RabbitMQ. A message is acknowledged only after it has been
-// handled, so if the service crashes in between, RabbitMQ delivers it again.
-public class PaymentSucceededConsumer(
+public interface IEventHandler<in TEvent>
+{
+    Task HandleAsync(TEvent message, CancellationToken ct);
+}
+
+// Reads events of one type from RabbitMQ and passes them to the handler. A message is acknowledged
+// only after it has been handled, so if the service crashes in between, RabbitMQ delivers it again.
+// Handlers must therefore be idempotent.
+public class EventConsumer<TEvent, THandler>(
+    string queue,
+    string routingKey,
     IServiceScopeFactory scopes,
     IConfiguration config,
-    ILogger<PaymentSucceededConsumer> logger) : BackgroundService
+    ILogger<EventConsumer<TEvent, THandler>> logger) : BackgroundService
+    where THandler : IEventHandler<TEvent>
 {
-    public const string Queue = "booking.payment-succeeded";
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
 
     private IConnection? _connection;
@@ -22,32 +33,33 @@ public class PaymentSucceededConsumer(
     {
         var channel = await ConnectAsync(stoppingToken);
 
-        // A durable queue keeps messages while Booking Service is down.
+        // A durable queue keeps messages while the service is down.
         await channel.ExchangeDeclareAsync(Exchanges.Events, ExchangeType.Topic, durable: true, cancellationToken: stoppingToken);
-        await channel.QueueDeclareAsync(Queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: stoppingToken);
-        await channel.QueueBindAsync(Queue, Exchanges.Events, PaymentSucceeded.RoutingKey, cancellationToken: stoppingToken);
+        await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: stoppingToken);
+        await channel.QueueBindAsync(queue, Exchanges.Events, routingKey, cancellationToken: stoppingToken);
         // One message at a time.
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: 1, global: false, stoppingToken);
 
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += (_, delivery) => HandleDeliveryAsync(channel, delivery, stoppingToken);
-        await channel.BasicConsumeAsync(Queue, autoAck: false, consumer, stoppingToken);
+        await channel.BasicConsumeAsync(queue, autoAck: false, consumer, stoppingToken);
     }
 
     private async Task HandleDeliveryAsync(IChannel channel, BasicDeliverEventArgs delivery, CancellationToken ct)
     {
         try
         {
-            var message = JsonSerializer.Deserialize<PaymentSucceeded>(delivery.Body.Span)!;
+            var message = JsonSerializer.Deserialize<TEvent>(delivery.Body.Span)!;
             await using var scope = scopes.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<PaymentSucceededHandler>().HandleAsync(message, ct);
+            await scope.ServiceProvider.GetRequiredService<THandler>().HandleAsync(message, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // E.g. the database is down. Wait and put the message back for another try.
             // Phase 6 adds a retry limit and a dead letter queue for messages that never succeed.
-            logger.LogError(ex, "Handling message {MessageId} failed; retrying in {Delay}", delivery.BasicProperties.MessageId, RetryDelay);
+            logger.LogError(ex, "Handling message {MessageId} from {Queue} failed; retrying in {Delay}",
+                delivery.BasicProperties.MessageId, queue, RetryDelay);
             await Task.Delay(RetryDelay, ct);
             await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: true, ct);
         }

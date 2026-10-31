@@ -1,18 +1,21 @@
-using HotelBooking.Contracts.Events;
-using Microsoft.EntityFrameworkCore;
-using PaymentService.Data;
-using RabbitMQ.Client;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using RabbitMQ.Client;
 
-namespace PaymentService;
+namespace HotelBooking.Messaging;
 
 // Publishes saved outbox messages to RabbitMQ. A message is marked published only after
 // RabbitMQ confirms it, so a crash in between sends it again (at-least-once delivery).
-public class OutboxPublisher(
+public class OutboxPublisher<TContext>(
     IServiceScopeFactory scopes,
     IConfiguration config,
     TimeProvider time,
-    ILogger<OutboxPublisher> logger) : BackgroundService
+    ILogger<OutboxPublisher<TContext>> logger) : BackgroundService
+    where TContext : DbContext
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
     private const int BatchSize = 100;
@@ -40,9 +43,9 @@ public class OutboxPublisher(
     public async Task<int> PublishPendingAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<TContext>();
 
-        var messages = await db.OutboxMessages
+        var messages = await db.Set<OutboxMessage>()
             .Where(m => m.PublishedAt == null)
             .OrderBy(m => m.CreatedAt)
             .Take(BatchSize)

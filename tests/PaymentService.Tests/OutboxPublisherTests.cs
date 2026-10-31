@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HotelBooking.Contracts.Events;
+using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentService.Data;
@@ -13,7 +14,7 @@ public class OutboxPublisherTests(PaymentServiceFactory factory) : IAsyncLifetim
     private const string TestQueue = "test.payment-succeeded";
 
     // Resolving the publisher starts the service, which applies migrations.
-    private readonly OutboxPublisher _publisher = factory.Services.GetRequiredService<OutboxPublisher>();
+    private readonly OutboxPublisher<PaymentDbContext> _publisher = factory.Services.GetRequiredService<OutboxPublisher<PaymentDbContext>>();
 
     private IConnection _connection = null!;
     private IChannel _channel = null!;

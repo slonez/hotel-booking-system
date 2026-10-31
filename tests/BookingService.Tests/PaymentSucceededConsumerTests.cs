@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BookingService.Data;
 using HotelBooking.Contracts.Events;
+using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 using RabbitMQ.Client;
 
@@ -27,8 +28,8 @@ public class PaymentSucceededConsumerTests(BookingServiceFactory factory) : IAsy
         await using var channel = await connection.CreateChannelAsync();
         // Declared like the consumer does, so the message waits in the queue even if the consumer has not started yet.
         await channel.ExchangeDeclareAsync(Exchanges.Events, ExchangeType.Topic, durable: true);
-        await channel.QueueDeclareAsync(PaymentSucceededConsumer.Queue, durable: true, exclusive: false, autoDelete: false);
-        await channel.QueueBindAsync(PaymentSucceededConsumer.Queue, Exchanges.Events, PaymentSucceeded.RoutingKey);
+        await channel.QueueDeclareAsync(PaymentSucceededHandler.Queue, durable: true, exclusive: false, autoDelete: false);
+        await channel.QueueBindAsync(PaymentSucceededHandler.Queue, Exchanges.Events, PaymentSucceeded.RoutingKey);
         await channel.BasicPublishAsync(Exchanges.Events, PaymentSucceeded.RoutingKey,
             JsonSerializer.SerializeToUtf8Bytes(new PaymentSucceeded(booking.Id, Guid.CreateVersion7(), booking.TotalPriceCents)));
 

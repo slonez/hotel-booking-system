@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using HotelBooking.Contracts.Events;
+using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 using PaymentService.Data;
 using Stripe;
