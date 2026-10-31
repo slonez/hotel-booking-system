@@ -108,6 +108,6 @@ A multi-hotel booking platform where customers search for room types, book them,
   - Check-out is after check-in.
   - Check-in is not in the past.
   - Maximum stay is 30 nights.
-- **Duplicate webhook:** Stripe sends the same webhook more than once. Events with an already processed event ID are ignored.
+- **Duplicate webhook:** Stripe sends the same webhook more than once. The payment only changes while it is `Pending`, so a duplicate event changes nothing.
 - **Double payment attempt:** The customer clicks "pay" twice or opens two tabs. One booking has only one payment session; a repeated request returns the existing session.
 - **Refund fails:** The customer cancels but the Stripe refund fails. The cancellation succeeds immediately and the room is released. The system retries the refund automatically in the background. If it still fails after several attempts, it is flagged for manual handling.

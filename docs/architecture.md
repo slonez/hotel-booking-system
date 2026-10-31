@@ -36,7 +36,7 @@ flowchart LR
 |---|---|---|
 | API Gateway | JWT validation, rate limiting, routing (REST → gRPC) | Nothing (stateless) |
 | Booking Service | Search, availability, holds, booking lifecycle | Hotels, room types, prices, bookings |
-| Payment Service | Stripe integration, payments, refunds, webhooks | Payments, refunds, processed Stripe event IDs |
+| Payment Service | Stripe integration, payments, refunds, webhooks | Payments, refunds |
 | Notification Service | Emails to customers | Log of sent notifications |
 
 Users are managed by Clerk. Services store only the Clerk user ID. Booking stores the customer's email from the JWT on the booking.
@@ -88,7 +88,7 @@ sequenceDiagram
 - **Transactional outbox** in Booking and Payment. Data and outgoing event are saved in the same transaction; a background worker publishes the event. Delivery is at-least-once.
 - **Idempotent consumers:**
   - Booking: state-based. `PaymentSucceeded` is ignored if the booking is already `Confirmed`. State changes are single atomic updates.
-  - Payment: processed Stripe event IDs.
+  - Payment: state-based (a Stripe event only changes a `Pending` payment).
   - Notification: log of sent notifications.
 - **Payment session creation:** booking ID is the idempotency key. Retries return the same session.
 - **Payment Service down when starting a booking:** hold is kept, customer sees an error and retries.

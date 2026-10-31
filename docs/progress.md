@@ -6,7 +6,7 @@ Phase 5 — Payment Integration
 
 ## Next step
 
-Phase 5 step 2: Stripe webhook in Payment Service (signature verification, processed event IDs, Payment → Succeeded/Expired).
+Phase 5 step 3: transactional outbox in Payment + RabbitMQ, `PaymentSucceeded` consumer in Booking (Held/Expired → Confirmed).
 
 ## Confirmed decisions
 
@@ -24,7 +24,7 @@ Phase 5 step 2: Stripe webhook in Payment Service (signature verification, proce
 - Services: API Gateway, Booking Service, Payment Service, Notification Service.
 - Data ownership:
   - Booking Service: hotels, room types, prices, bookings (incl. holds and statuses), availability. Search lives here. Stores customer email from JWT on the booking.
-  - Payment Service: payments, refunds, processed Stripe event IDs.
+  - Payment Service: payments, refunds.
   - Notification Service: log of sent notifications only. Receives all needed data in events.
   - API Gateway: stateless, no database. JWT validation, rate limiting (in memory), routing.
 - Communication:
@@ -43,12 +43,12 @@ Phase 5 step 2: Stripe webhook in Payment Service (signature verification, proce
 - Idempotent consumers:
   - Booking: state-based, option B (`PaymentSucceeded` moves Held or Expired → Confirmed if a room is free; already Confirmed → ignore). Check + update must be atomic.
   - Notification: log of sent notifications (by message ID).
-  - Payment (Stripe webhooks): processed Stripe event IDs.
+  - Payment (Stripe webhooks): state-based, `Pending` → `Succeeded`/`Expired` only (no processed-events table; decided in Phase 5).
 - Booking states: Held, Confirmed, Expired, Cancelled (see `docs/data-and-api-design.md`). Late payment without room keeps `Expired`.
 - Booking schema: Hotels, RoomTypes (TotalRooms), Bookings (TotalPrice, ExpiresAt).
 - Double booking prevented with `SELECT ... FOR UPDATE` on the room type row. `ExpiresAt` is the source of truth for hold expiry.
 - Payment states: Pending, Succeeded, Expired. Refund states: Pending, Succeeded, Failed (manual).
-- Payment schema: Payments (BookingId unique), Refunds (PaymentId unique, own table), ProcessedStripeEvents, OutboxMessages.
+- Payment schema: Payments (BookingId unique), Refunds (PaymentId unique, own table), OutboxMessages.
 - Events: `PaymentSucceeded`, `BookingConfirmed`, `RefundRequested` (see `docs/data-and-api-design.md`).
 - gRPC/REST contracts are defined in Phase 4 per service, not upfront.
 - Repo: monorepo, one solution (`HotelBooking.slnx`). One project per service, no layered architecture. Protos in `src/Contracts/Protos`.
@@ -71,6 +71,7 @@ Phase 5 step 2: Stripe webhook in Payment Service (signature verification, proce
 - Payment Service: gRPC on port 5242, `payment` database. Stripe secret key in user secrets. Tests replace Stripe's `SessionService` with a fake.
 - Booking → Payment gRPC uses `EnableCallContextPropagation()`: the Gateway's deadline (15 s for checkout) and cancellation flow through. Payment errors pass through Booking unchanged. Stripe errors → `Unavailable` (generic message, details logged).
 - Frontend: after booking, redirects to Stripe Checkout. Held bookings have a Pay button. Stripe returns to `/?payment=success|cancelled`; booking stays Held until the webhook flow (steps 2–3).
+- Stripe webhook: `POST /stripe/webhook` on a separate HTTP/1.1 port (5243); gRPC stays HTTP/2 on 5242. Signature checked with `EventUtility.ConstructEvent`; secret in user secrets. Local testing with `stripe listen`.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
 
@@ -124,3 +125,5 @@ Phase 5 step 2: Stripe webhook in Payment Service (signature verification, proce
 - 2026-10-31: Phase 5 decisions: Stripe Checkout, RabbitMQ + outbox in Phase 5.
 - 2026-10-31: Phase 5 step 1a done: Payment Service with `CreateCheckoutSession` (Stripe Checkout, idempotent per booking). 7 tests passing; concurrency test fails without the unique-violation handling.
 - 2026-10-31: Phase 5 step 1b done: `StartPayment`, `POST /api/bookings/{id}/checkout`, Stripe redirect and Pay button. 66 tests passing; verified against real Stripe test mode with grpcurl.
+- 2026-10-31: Webhook idempotency changed to state-based (no `ProcessedStripeEvents` table): the atomic `WHERE Status = 'Pending'` update already ignores duplicates.
+- 2026-10-31: Phase 5 step 2 done: Stripe webhook (signature check, completed/expired → Succeeded/Expired). 74 tests passing.

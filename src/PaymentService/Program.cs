@@ -26,5 +26,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapGrpcService<PaymentsService>();
+app.MapPost("/stripe/webhook", StripeWebhook.HandleAsync);
 
 app.Run();

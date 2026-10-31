@@ -96,14 +96,12 @@ Payments
 Refunds
   Id, PaymentId (unique), Amount, Reason, Status, Attempts, StripeRefundId, CreatedAt
 
-ProcessedStripeEvents
-  EventId (PK), ProcessedAt
-
 OutboxMessages
 ```
 
 - `BookingId` unique: one payment per booking (NFR-2). `CreateCheckoutSession` returns the saved session's URL if one exists. Concurrent calls may create extra Stripe sessions, but only the saved session's URL is ever returned, so the others expire unpaid. (A Stripe idempotency key does not work here: `expires_at` differs on every call, and Stripe rejects a reused key with different parameters.)
 - Checkout sessions expire 30 min after creation (Stripe minimum), so a session can outlive its hold. Payment after hold expiry is a late payment (FR-12).
+- Stripe webhooks are idempotent through the state change (`WHERE StripeSessionId = X AND Status = 'Pending'`), not a processed-events table: a duplicate or late event changes no row. Events: `checkout.session.completed` (when `payment_status = paid`) and `checkout.session.async_payment_succeeded` → Succeeded, `checkout.session.expired` → Expired. Others and unknown sessions → 200, ignored. Invalid signature → 400.
 - `PaymentId` unique on refunds: a duplicate `RefundRequested` event cannot create a second refund.
 - `Refund.Id` is the Stripe idempotency key, so retries cannot refund twice in Stripe.
 

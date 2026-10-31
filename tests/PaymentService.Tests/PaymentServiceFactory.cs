@@ -23,6 +23,8 @@ public class PaymentServiceCollection : ICollectionFixture<PaymentServiceFactory
 // Runs Payment Service in memory against a real PostgreSQL in Docker and a fake Stripe.
 public class PaymentServiceFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    public const string WebhookSecret = "whsec_test";
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18").Build();
 
     public string ConnectionString => _postgres.GetConnectionString();
@@ -35,6 +37,7 @@ public class PaymentServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:PaymentDb", ConnectionString);
+        builder.UseSetting("Stripe:WebhookSecret", WebhookSecret);
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Time);
