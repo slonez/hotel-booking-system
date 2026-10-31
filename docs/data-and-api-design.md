@@ -97,6 +97,7 @@ Refunds
   Id, PaymentId (unique), Amount, Reason, Status, Attempts, StripeRefundId, CreatedAt
 
 OutboxMessages
+  Id (= RabbitMQ message ID), Type (= routing key), Payload (jsonb), CreatedAt, PublishedAt
 ```
 
 - `BookingId` unique: one payment per booking (NFR-2). `CreateCheckoutSession` returns the saved session's URL if one exists. Concurrent calls may create extra Stripe sessions, but only the saved session's URL is ever returned, so the others expire unpaid. (A Stripe idempotency key does not work here: `expires_at` differs on every call, and Stripe rejects a reused key with different parameters.)
@@ -108,6 +109,10 @@ OutboxMessages
 ## Events
 
 All events go through the outbox (at-least-once). Consumers are idempotent.
+
+- The state change and the outbox row are saved in one transaction. `OutboxPublisher` (BackgroundService, every second) publishes unpublished rows with publisher confirms and sets `PublishedAt` after RabbitMQ confirms each message.
+- RabbitMQ: one durable topic exchange `hotel-booking`; routing key = event type (`payment.succeeded`). Persistent messages, `MessageId` = outbox `Id`. Each consumer declares its own durable queue. A message published before any queue is bound is dropped.
+- Event payload records live in `src/Contracts/Events` (linked into each service like the protos).
 
 | Event | Publisher | Consumers | Payload |
 |---|---|---|---|

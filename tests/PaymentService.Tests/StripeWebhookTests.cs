@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using HotelBooking.Contracts.Events;
 using Microsoft.EntityFrameworkCore;
 using PaymentService.Data;
 using Stripe;
@@ -48,6 +49,29 @@ public class StripeWebhookTests(PaymentServiceFactory factory) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Succeeded_payment_saves_payment_succeeded_event_to_outbox()
+    {
+        await SendEvent(EventTypes.CheckoutSessionCompleted);
+
+        await using var db = factory.CreateDbContext();
+        var payment = await db.Payments.SingleAsync();
+        var message = await db.OutboxMessages.SingleAsync();
+        Assert.Equal(PaymentSucceeded.RoutingKey, message.Type);
+        Assert.Null(message.PublishedAt);
+        Assert.Equal(new PaymentSucceeded(payment.BookingId, payment.Id, 25800),
+            JsonSerializer.Deserialize<PaymentSucceeded>(message.Payload));
+    }
+
+    [Fact]
+    public async Task Expired_payment_saves_no_event()
+    {
+        await SendEvent(EventTypes.CheckoutSessionExpired);
+
+        await using var db = factory.CreateDbContext();
+        Assert.False(await db.OutboxMessages.AnyAsync());
+    }
+
+    [Fact]
     public async Task Duplicate_event_is_acknowledged_without_changes()
     {
         var eventJson = EventJson(EventTypes.CheckoutSessionCompleted, SessionId, "paid");
@@ -57,6 +81,8 @@ public class StripeWebhookTests(PaymentServiceFactory factory) : IAsyncLifetime
 
         Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (first.StatusCode, second.StatusCode));
         Assert.Equal(PaymentStatus.Succeeded, await GetStatus());
+        await using var db = factory.CreateDbContext();
+        Assert.Equal(1, await db.OutboxMessages.CountAsync());
     }
 
     [Fact]

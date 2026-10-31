@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using PaymentService.Data;
 using Stripe.Checkout;
 using Testcontainers.PostgreSql;
+using Testcontainers.RabbitMq;
 
 namespace PaymentService.Tests;
 
@@ -20,14 +21,17 @@ public class PaymentServiceCollection : ICollectionFixture<PaymentServiceFactory
     public const string Name = "PaymentService";
 }
 
-// Runs Payment Service in memory against a real PostgreSQL in Docker and a fake Stripe.
+// Runs Payment Service in memory against real PostgreSQL and RabbitMQ in Docker and a fake Stripe.
 public class PaymentServiceFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string WebhookSecret = "whsec_test";
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18").Build();
+    private readonly RabbitMqContainer _rabbitMq = new RabbitMqBuilder("rabbitmq:4").Build();
 
     public string ConnectionString => _postgres.GetConnectionString();
+
+    public string RabbitMqConnectionString => _rabbitMq.GetConnectionString();
 
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero));
 
@@ -38,6 +42,7 @@ public class PaymentServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
     {
         builder.UseSetting("ConnectionStrings:PaymentDb", ConnectionString);
         builder.UseSetting("Stripe:WebhookSecret", WebhookSecret);
+        builder.UseSetting("ConnectionStrings:RabbitMq", RabbitMqConnectionString);
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Time);
@@ -60,13 +65,15 @@ public class PaymentServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
         Sessions = new FakeSessionService();
         await using var db = CreateDbContext();
         await db.Payments.ExecuteDeleteAsync();
+        await db.OutboxMessages.ExecuteDeleteAsync();
     }
 
-    public Task InitializeAsync() => _postgres.StartAsync();
+    public Task InitializeAsync() => Task.WhenAll(_postgres.StartAsync(), _rabbitMq.StartAsync());
 
     async Task IAsyncLifetime.DisposeAsync()
     {
         await base.DisposeAsync();
         await _postgres.DisposeAsync();
+        await _rabbitMq.DisposeAsync();
     }
 }
