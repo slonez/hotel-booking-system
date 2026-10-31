@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 4 — Core Implementation
+Phase 5 — Payment Integration
 
 ## Next step
 
-Phase 5 (Stripe): decide A) RabbitMQ + outbox already in Phase 5 or B) temporary gRPC call Payment → Booking, and Stripe Checkout vs Payment Intents.
+Phase 5 step 1b: Booking `StartPayment` → Payment, `POST /api/bookings/{id}/checkout`, frontend redirect to Stripe and Pay button for held bookings. Needs a Stripe test secret key in user secrets.
 
 ## Confirmed decisions
 
@@ -63,6 +63,12 @@ Phase 5 (Stripe): decide A) RabbitMQ + outbox already in Phase 5 or B) temporary
 - Hold expiry: `HoldExpiryJob` (BackgroundService), runs every minute, one atomic `ExecuteUpdate` (`Held` + `ExpiresAt <= now` → `Expired`). Errors are logged; next tick retries.
 - Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time. Booking tests share one container (xUnit collection fixture) and clear bookings before each test.
 - Gateway → Booking gRPC calls get a 5 s default deadline (`DeadlineInterceptor`). `DeadlineExceeded` → 504.
+- Stripe Checkout (hosted page), not Payment Intents.
+- RabbitMQ + transactional outbox are built in Phase 5 for `PaymentSucceeded` (no temporary gRPC call). Phase 6 adds Notification.
+- Payment start: two calls. `POST /api/bookings` creates the hold; `POST /api/bookings/{id}/checkout` → Booking `StartPayment` → Payment `CreateCheckoutSession` returns the Stripe URL. Retry = same call again.
+- Checkout session expires 30 min after creation (Stripe minimum), so it can outlive the hold; paying after hold expiry is a late payment.
+- Checkout idempotency via unique `Payments.BookingId`, not a Stripe idempotency key (parameters differ per call). Extra sessions from races are never shown and expire unpaid.
+- Payment Service: gRPC on port 5242, `payment` database. Stripe secret key in user secrets. Tests replace Stripe's `SessionService` with a fake.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
 
@@ -112,3 +118,6 @@ Phase 5 (Stripe): decide A) RabbitMQ + outbox already in Phase 5 or B) temporary
 - 2026-10-30: My bookings (FR-5) done: `ListBookings` gRPC, `GET /api/bookings`, frontend list. 30 tests passing.
 - 2026-10-30: Cancellation (FR-14..16) done: `CancellationPolicy`, `CancelBooking` gRPC, `POST /api/bookings/{id}/cancel`, frontend button. 46 tests passing. Phase 4 features complete.
 - 2026-10-30: Phase 4 review fixes: gRPC deadline (504), shared test container and test data helpers, idempotency note corrected. 49 tests passing. Phase 4 complete.
+- 2026-10-30: Phase 5 started.
+- 2026-10-31: Phase 5 decisions: Stripe Checkout, RabbitMQ + outbox in Phase 5.
+- 2026-10-31: Phase 5 step 1a done: Payment Service with `CreateCheckoutSession` (Stripe Checkout, idempotent per booking). 7 tests passing; concurrency test fails without the unique-violation handling.

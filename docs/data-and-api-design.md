@@ -91,7 +91,7 @@ No `Failed` state for payments: in Stripe Checkout the customer can retry with a
 
 ```
 Payments
-  Id, BookingId (unique), StripeSessionId, Amount, Status, CreatedAt
+  Id, BookingId (unique), StripeSessionId (unique), CheckoutUrl, Amount, Status, CreatedAt
 
 Refunds
   Id, PaymentId (unique), Amount, Reason, Status, Attempts, StripeRefundId, CreatedAt
@@ -102,7 +102,8 @@ ProcessedStripeEvents
 OutboxMessages
 ```
 
-- `BookingId` unique: one payment per booking (NFR-2). Also the idempotency key when creating the Checkout session.
+- `BookingId` unique: one payment per booking (NFR-2). `CreateCheckoutSession` returns the saved session's URL if one exists. Concurrent calls may create extra Stripe sessions, but only the saved session's URL is ever returned, so the others expire unpaid. (A Stripe idempotency key does not work here: `expires_at` differs on every call, and Stripe rejects a reused key with different parameters.)
+- Checkout sessions expire 30 min after creation (Stripe minimum), so a session can outlive its hold. Payment after hold expiry is a late payment (FR-12).
 - `PaymentId` unique on refunds: a duplicate `RefundRequested` event cannot create a second refund.
 - `Refund.Id` is the Stripe idempotency key, so retries cannot refund twice in Stripe.
 
