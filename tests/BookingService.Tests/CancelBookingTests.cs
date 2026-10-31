@@ -1,6 +1,7 @@
 using BookingService.Data;
 using Grpc.Core;
 using HotelBooking.Contracts.Booking;
+using HotelBooking.Contracts.Events;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookingService.Tests;
@@ -32,6 +33,9 @@ public class CancelBookingTests(BookingServiceFactory factory) : IAsyncLifetime
         Assert.Equal(factory.Time.GetUtcNow(), saved.CancelledAt);
         Assert.Equal(59800, saved.RefundAmountCents);
 
+        Assert.Equal(new RefundRequested(booking.Id, "user_a@example.com", "Seaside Hotel", "Suite", 59800, RefundReason.Cancelled),
+            await factory.SingleOutboxMessageAsync<RefundRequested>(RefundRequested.RoutingKey));
+
         var search = await _client.SearchAvailabilityAsync(new SearchAvailabilityRequest
         {
             City = "Helsinki", CheckInDate = "2026-11-10", CheckOutDate = "2026-11-12"
@@ -60,6 +64,7 @@ public class CancelBookingTests(BookingServiceFactory factory) : IAsyncLifetime
         var ex = await Assert.ThrowsAsync<RpcException>(() => Cancel(booking.Id, "user_a"));
 
         Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+        Assert.Equal(0, await factory.CountOutboxMessagesAsync());
     }
 
     private async Task<CancelBookingResponse> Cancel(Guid bookingId, string userId) =>

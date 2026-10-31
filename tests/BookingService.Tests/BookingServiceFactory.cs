@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using BookingService.Data;
 using Grpc.Net.Client;
 using HotelBooking.Contracts.Booking;
@@ -58,6 +59,21 @@ public class BookingServiceFactory : WebApplicationFactory<Program>, IAsyncLifet
     {
         await using var db = CreateDbContext();
         await db.Bookings.ExecuteDeleteAsync();
+        await db.OutboxMessages.ExecuteDeleteAsync();
+    }
+
+    // The single unpublished outbox message of the given type, deserialized.
+    public async Task<T> SingleOutboxMessageAsync<T>(string type)
+    {
+        await using var db = CreateDbContext();
+        var message = await db.OutboxMessages.SingleAsync(m => m.Type == type);
+        return JsonSerializer.Deserialize<T>(message.Payload)!;
+    }
+
+    public async Task<int> CountOutboxMessagesAsync()
+    {
+        await using var db = CreateDbContext();
+        return await db.OutboxMessages.CountAsync();
     }
 
     public async Task AddBookingsAsync(params Booking[] bookings)

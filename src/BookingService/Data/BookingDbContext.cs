@@ -1,3 +1,4 @@
+using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookingService.Data;
@@ -7,12 +8,15 @@ public class BookingDbContext(DbContextOptions<BookingDbContext> options) : DbCo
     public DbSet<Hotel> Hotels => Set<Hotel>();
     public DbSet<RoomType> RoomTypes => Set<RoomType>();
     public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Booking>()
             .Property(b => b.Status)
             .HasConversion<string>();
+
+        modelBuilder.ConfigureOutbox();
 
         modelBuilder.Entity<Hotel>().HasData(
             new Hotel { Id = 1, Name = "Hotel Aurora", Address = "Mannerheimintie 10", City = "Helsinki", ZipCode = "00100", Country = "Finland", CheckInTime = new TimeOnly(15, 0), TimeZone = "Europe/Helsinki" },

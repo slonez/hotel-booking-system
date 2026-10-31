@@ -18,6 +18,7 @@ builder.Services.AddGrpcClient<Payments.PaymentsClient>(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HoldExpiryJob>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HoldExpiryJob>());
+builder.Services.AddOutboxPublisher<BookingDbContext>();
 builder.Services.AddEventConsumer<PaymentSucceeded, PaymentSucceededHandler>(
     PaymentSucceededHandler.Queue, PaymentSucceeded.RoutingKey);
 

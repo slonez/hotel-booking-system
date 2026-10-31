@@ -17,7 +17,9 @@ public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILo
         var now = time.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
-        var booking = await db.Bookings.AsNoTracking().SingleOrDefaultAsync(b => b.Id == message.BookingId, ct);
+        var booking = await db.Bookings.AsNoTracking()
+            .Include(b => b.RoomType).ThenInclude(rt => rt.Hotel)
+            .SingleOrDefaultAsync(b => b.Id == message.BookingId, ct);
         if (booking is null)
         {
             logger.LogWarning("Payment {PaymentId} succeeded for unknown booking {BookingId}", message.PaymentId, message.BookingId);
@@ -47,9 +49,14 @@ public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILo
                 .ToListAsync(ct);
             if (Availability.MaxRoomsTaken(others, booking.CheckInDate, booking.CheckOutDate) >= roomType.TotalRooms)
             {
-                // TODO(Phase 5 step 4): publish RefundRequested (Reason = LatePayment).
-                logger.LogWarning("Late payment {PaymentId} for booking {BookingId}, but no room is left",
+                // The booking stays Expired and the customer gets the full payment back. A duplicate message
+                // publishes the event again; Payment Service refunds a payment only once (unique PaymentId).
+                logger.LogWarning("Late payment {PaymentId} for booking {BookingId}, but no room is left; refunding",
                     message.PaymentId, booking.Id);
+                db.OutboxMessages.Add(OutboxMessage.Create(RefundRequested.RoutingKey,
+                    BookingsService.RefundRequestedFor(booking, message.AmountCents, RefundReason.LatePayment), now));
+                await db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
                 return;
             }
         }

@@ -28,10 +28,11 @@ public class PaymentSucceededHandlerTests(BookingServiceFactory factory) : IAsyn
         await Handle(booking);
 
         Assert.Equal(BookingStatus.Confirmed, await GetStatus(booking));
+        Assert.Equal(0, await factory.CountOutboxMessagesAsync());
     }
 
     [Fact]
-    public async Task Late_payment_does_not_confirm_when_the_room_was_taken()
+    public async Task Late_payment_without_room_keeps_booking_expired_and_requests_full_refund()
     {
         var late = factory.NewBooking(BookingStatus.Expired, roomTypeId: SeasideSuite, userId: "user_late", expiresIn: TimeSpan.FromMinutes(-1));
         var other = factory.NewBooking(BookingStatus.Confirmed, roomTypeId: SeasideSuite, userId: "user_other",
@@ -41,6 +42,8 @@ public class PaymentSucceededHandlerTests(BookingServiceFactory factory) : IAsyn
         await Handle(late);
 
         Assert.Equal(BookingStatus.Expired, await GetStatus(late));
+        Assert.Equal(new RefundRequested(late.Id, "user_late@example.com", "Seaside Hotel", "Suite", late.TotalPriceCents, RefundReason.LatePayment),
+            await factory.SingleOutboxMessageAsync<RefundRequested>(RefundRequested.RoutingKey));
     }
 
     [Theory]

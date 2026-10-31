@@ -6,7 +6,7 @@ Phase 5 — Payment Integration
 
 ## Next step
 
-Phase 5 step 4b: Booking publishes `RefundRequested` (outbox) on cancellation and on late payment without a room. Then 4c: Payment consumes it into `Refunds` and `RefundProcessor` refunds through Stripe (idempotency key = Refund.Id, max 5 attempts → Failed); webhook stores `PaymentIntentId`.
+Phase 5 step 4c: Payment consumes it into `Refunds` and `RefundProcessor` refunds through Stripe (idempotency key = Refund.Id, max 5 attempts → Failed); webhook stores `PaymentIntentId`.
 
 ## Confirmed decisions
 
@@ -88,8 +88,6 @@ Phase 5 step 4b: Booking publishes `RefundRequested` (outbox) on cancellation an
 
 ### Later (Phase 3/5)
 
-- Cancellation does not publish `RefundRequested` yet (needs outbox).
-
 - Payment can succeed right before hold expiry while the webhook arrives after it. Late payment handling (FR-12) covers this.
 
 ## Log
@@ -136,3 +134,4 @@ Phase 5 step 4b: Booking publishes `RefundRequested` (outbox) on cancellation an
 - 2026-10-31: Phase 5 step 3b done: Booking consumes `PaymentSucceeded` and confirms bookings (incl. late payment when a room is free). 86 tests passing, consumer tested through real RabbitMQ.
 - 2026-10-31: Phase 5 step 4 plan: shared `src/Messaging` library, refunds via background job.
 - 2026-10-31: Phase 5 step 4a done: outbox publisher and consumer moved to `src/Messaging`; no behavior or schema change. 86 tests passing.
+- 2026-10-31: Phase 5 step 4b done: Booking outbox; cancellation and late payment without room publish `RefundRequested` (reason `Cancelled`/`LatePayment`). 86 tests passing.

@@ -3,7 +3,9 @@ using BookingService.Data;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using HotelBooking.Contracts.Booking;
+using HotelBooking.Contracts.Events;
 using HotelBooking.Contracts.Payment;
+using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookingService;
@@ -153,6 +155,9 @@ public class BookingsService(BookingDbContext db, Payments.PaymentsClient paymen
         var refund = CancellationPolicy.RefundAmount(booking.TotalPriceCents, checkIn, now)
             ?? throw new RpcException(new Status(StatusCode.FailedPrecondition, "Bookings cannot be cancelled after check-in time."));
 
+        // The status change and the refund event are saved together (transactional outbox).
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
         // Atomic transition: only succeeds if the booking is still Confirmed.
         var updated = await db.Bookings
             .Where(b => b.Id == booking.Id && b.Status == BookingStatus.Confirmed)
@@ -162,6 +167,11 @@ public class BookingsService(BookingDbContext db, Payments.PaymentsClient paymen
                 .SetProperty(b => b.RefundAmountCents, refund), ct);
         if (updated == 0)
             throw new RpcException(new Status(StatusCode.FailedPrecondition, "Only confirmed bookings can be cancelled."));
+
+        db.OutboxMessages.Add(OutboxMessage.Create(RefundRequested.RoutingKey,
+            RefundRequestedFor(booking, refund, RefundReason.Cancelled), now));
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
 
         return new CancelBookingResponse { RefundAmountCents = refund };
     }
@@ -186,6 +196,10 @@ public class BookingsService(BookingDbContext db, Payments.PaymentsClient paymen
 
         return new StartPaymentResponse { CheckoutUrl = response.CheckoutUrl };
     }
+
+    // Expects booking.RoomType.Hotel to be loaded.
+    public static RefundRequested RefundRequestedFor(Booking booking, long amountCents, RefundReason reason) =>
+        new(booking.Id, booking.Email, booking.RoomType.Hotel.Name, booking.RoomType.Name, amountCents, reason);
 
     // Another user's booking looks the same as a missing one, so its existence is not revealed (NFR-6).
     private async Task<Booking> FindOwnBooking(string bookingId, string clerkUserId, CancellationToken ct)
