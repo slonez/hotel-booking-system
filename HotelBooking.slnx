@@ -3,12 +3,14 @@
     <Project Path="src/BookingService/BookingService.csproj" />
     <Project Path="src/Gateway/Gateway.csproj" />
     <Project Path="src/Messaging/Messaging.csproj" />
+    <Project Path="src/NotificationService/NotificationService.csproj" />
     <Project Path="src/PaymentService/PaymentService.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BookingService.Tests/BookingService.Tests.csproj" />
     <Project Path="tests/Gateway.Tests/Gateway.Tests.csproj" />
     <Project Path="tests/Messaging.Tests/Messaging.Tests.csproj" />
+    <Project Path="tests/NotificationService.Tests/NotificationService.Tests.csproj" />
     <Project Path="tests/PaymentService.Tests/PaymentService.Tests.csproj" />
   </Folder>
 </Solution>

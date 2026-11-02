@@ -6,7 +6,7 @@ Phase 6 — Asynchronous Messaging and Reliability
 
 ## Next step
 
-Phase 6 step 3: Notification Service. Until it has declared its queue, Booking's outbox stops at the first `BookingConfirmed`. Then step 4: failure tests and review.
+Phase 6 step 4: failure tests and review.
 
 ## Confirmed decisions
 
@@ -77,6 +77,7 @@ Phase 6 step 3: Notification Service. Until it has declared its queue, Booking's
 - Outbox (Payment): `OutboxMessages` saved in the webhook transaction only when the payment actually changed to Succeeded. `OutboxPublisher` publishes every second as mandatory with publisher confirms, marks each message after its confirm. Without a bound queue the message stays in the outbox.
 - Booking consumer: `EventConsumer<PaymentSucceeded, PaymentSucceededHandler>` (RabbitMQ, durable queue `booking.payment-succeeded`, prefetch 1, ack after handling). Handler logic is tested directly. Late payment re-checks availability under the room type lock, using the time read after the lock.
 - Consumer errors: quorum queues with a dead letter queue `<queue>.dead`. `EventConsumer` makes 20 attempts 5 s apart (about 100 s) while holding the message, then dead letters it; malformed messages go there at once. Own counting because `x-delivery-limit` does not count nacks with requeue. Dead letters are moved back by hand.
+- Notification Service: web host without endpoints on port 5252 (same setup and test factory as other services; health checks in Phase 7), `notification` database. Log rows hold no customer data.
 - Notifications (Phase 6): MailKit + Mailpit in compose. Duplicates stopped with unique `(BookingId, Type)` instead of message ID; email is sent first and then logged, so a crash can duplicate an email but not lose it.
 - Refunds: `RefundRequested` consumer only saves a Pending `Refunds` row (unique `PaymentId` stops duplicates). A separate `RefundProcessor` job calls Stripe.
 - Background loops and consumers treat an exception as shutdown only when their own token is cancelled, so a timeout is logged and retried.
@@ -91,9 +92,8 @@ Phase 6 step 3: Notification Service. Until it has declared its queue, Booking's
 
 ### Later
 
-- Phase 6: customers get no notice of a late-payment refund until Notification Service exists.
 - Phase 6 or later: the customer sees the requested refund amount, not whether the refund succeeded.
-- Phase 7: alert on `Failed` refunds and non-empty dead letter queues. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
+- Phase 7: alert on `Failed` refunds and non-empty dead letter queues. Start Notification Service before a Booking version that publishes a new event, otherwise Booking's outbox stops at it. Real SMTP provider. Require TLS for SMTP in production. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
 
 ## Log
 
@@ -145,3 +145,4 @@ Phase 6 step 3: Notification Service. Until it has declared its queue, Booking's
 - 2026-11-02: Phase 6 started.
 - 2026-11-02: Phase 6 step 1 done: dead letter queues and retry limit in `src/Messaging`, tested through real RabbitMQ in new `Messaging.Tests`.
 - 2026-11-02: Phase 6 step 2 done: Booking publishes `BookingConfirmed` through the outbox when a booking is confirmed.
+- 2026-11-02: Phase 6 step 3 done: Notification Service sends confirmation, cancellation and late-payment emails (tested through real RabbitMQ, PostgreSQL and Mailpit). 111 tests passing.

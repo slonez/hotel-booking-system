@@ -32,7 +32,8 @@ After adding a service, recreate the volume (`docker compose down -v`) or run it
 Start (each in its own terminal):
 
 ```bash
-docker compose up -d                        # PostgreSQL on 5433, RabbitMQ on 5672 (UI: http://localhost:15672, guest/guest)
+docker compose up -d                        # PostgreSQL on 5433, RabbitMQ on 5672 (UI: http://localhost:15672, guest/guest), Mailpit (UI: http://localhost:8025)
+dotnet run --project src/NotificationService  # Consumes events, sends emails to Mailpit. Start before the first booking is confirmed.
 dotnet run --project src/BookingService     # gRPC on http://localhost:5232
 dotnet run --project src/PaymentService     # gRPC on :5242, Stripe webhooks on :5243
 stripe listen --events checkout.session.completed,checkout.session.expired,checkout.session.async_payment_succeeded \

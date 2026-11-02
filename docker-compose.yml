@@ -18,6 +18,12 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
 
+  mailpit:
+    image: axllent/mailpit:v1.33
+    ports:
+      - "1025:1025"     # SMTP
+      - "8025:8025"     # Web UI for caught emails
+
 volumes:
   postgres-data:
   rabbitmq-data:

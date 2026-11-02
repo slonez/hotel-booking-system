@@ -127,6 +127,19 @@ All events go through the outbox (at-least-once). Consumers are idempotent.
 - Cancellation and late payment without room both use `RefundRequested`. Notification picks the email text from `Reason`.
 - Payment ignores the display fields (Email, HotelName, RoomTypeName).
 
+## Notification Service schema
+
+```
+Notifications
+  Id, BookingId, Type, SentAt
+  UNIQUE (BookingId, Type)
+```
+
+- Types: `BookingConfirmed`, `BookingCancelled`, `LatePaymentRefund` (FR-17). `RefundRequested.Reason` chooses between the last two.
+- Queues: `notification.booking-confirmed`, `notification.refund-requested`.
+- The email is sent first and the row saved after it. A crash in between can duplicate an email but not lose one. Failed sending follows the normal consumer retries, so an SMTP outage longer than about 100 s moves messages to the dead letter queue.
+- No customer data is stored; the email address and other content come in the event.
+
 ## API contracts
 
 gRPC contracts live in `src/Contracts/Protos`. REST endpoints are in the Gateway.
