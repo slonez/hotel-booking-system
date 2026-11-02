@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Prometheus;
 using RabbitMQ.Client;
 
 namespace HotelBooking.Messaging;
@@ -19,6 +20,11 @@ public class OutboxPublisher<TContext>(
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
     private const int BatchSize = 100;
+
+    private static readonly Gauge Unpublished = Metrics.CreateGauge(
+        "hotel_outbox_unpublished_messages", "Outbox messages waiting to be published.");
+    private static readonly Gauge OldestAge = Metrics.CreateGauge(
+        "hotel_outbox_oldest_message_age_seconds", "Age of the oldest unpublished outbox message; 0 when there are none.");
 
     private IConnection? _connection;
     private IChannel? _channel;
@@ -51,6 +57,11 @@ public class OutboxPublisher<TContext>(
             .OrderBy(m => m.CreatedAt)
             .Take(BatchSize)
             .ToListAsync(ct);
+
+        // Set before publishing, so a stuck outbox shows up even though publishing throws.
+        Unpublished.Set(await db.Set<OutboxMessage>().CountAsync(m => m.PublishedAt == null, ct));
+        OldestAge.Set(messages.Count == 0 ? 0 : (time.GetUtcNow() - messages[0].CreatedAt).TotalSeconds);
+
         if (messages.Count == 0)
             return 0;
 

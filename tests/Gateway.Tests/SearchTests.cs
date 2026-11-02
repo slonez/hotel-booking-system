@@ -75,6 +75,19 @@ public class SearchTests : IClassFixture<GatewayFactory>
         Assert.False(serverError.TryGetProperty("detail", out _));
     }
 
+    [Fact]
+    public async Task Metrics_count_errors_with_the_status_code_the_client_got()
+    {
+        _factory.Bookings.Error = new RpcException(new Status(StatusCode.Internal, "Failed"));
+        await GetProblem();
+
+        var metrics = await _client.GetStringAsync("/metrics");
+
+        // The exception handler clears the route, so the endpoint is empty. The GatewayErrors alert relies on this form.
+        Assert.Contains(metrics.Split('\n'), line => line.StartsWith("http_requests_received_total{")
+            && line.Contains("code=\"500\"") && line.Contains("endpoint=\"\""));
+    }
+
     private async Task<JsonElement> GetProblem()
     {
         var response = await _client.GetAsync("/api/search?city=Helsinki&checkIn=2026-11-10&checkOut=2026-11-12");

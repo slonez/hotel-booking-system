@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PaymentService.Data;
+using Prometheus;
 using Stripe;
 
 namespace PaymentService;
@@ -12,6 +13,9 @@ public class RefundProcessor(IServiceScopeFactory scopes, RefundService stripeRe
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
     public const int MaxAttempts = 5;
     private const int BatchSize = 20;
+
+    private static readonly Gauge FailedRefunds = Metrics.CreateGauge(
+        "hotel_refunds_failed", "Refunds that need manual handling.");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -72,6 +76,8 @@ public class RefundProcessor(IServiceScopeFactory scopes, RefundService stripeRe
             // Saved one by one, so a crash does not lose the result of earlier refunds.
             await db.SaveChangesAsync(ct);
         }
+
+        FailedRefunds.Set(await db.Refunds.CountAsync(r => r.Status == RefundStatus.Failed, ct));
         return refunds.Count;
     }
 }

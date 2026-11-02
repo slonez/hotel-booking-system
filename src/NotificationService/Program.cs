@@ -1,6 +1,7 @@
 using HotelBooking.Contracts.Events;
 using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Prometheus;
 using NotificationService;
 using NotificationService.Data;
 
@@ -9,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<NotificationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("NotificationDb")));
-builder.Services.AddHealthChecks().AddDbContextCheck<NotificationDbContext>();
+builder.Services.AddHealthChecks().AddDbContextCheck<NotificationDbContext>().ForwardToPrometheus();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<EmailSender>();
 builder.Services.AddScoped<NotificationSender>();
@@ -28,4 +29,5 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", app.Environment.IsDe
 }
 
 app.MapHealthChecks("/health");
+app.MapMetrics();
 app.Run();

@@ -21,6 +21,18 @@ jobs:
       # Integration tests start their own containers with Testcontainers; the runner has Docker.
       - run: dotnet test --no-build
 
+  monitoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Prometheus config and test alert rules
+        run: |
+          docker run --rm -v "$PWD/docker/prometheus:/etc/prometheus:ro" --entrypoint promtool prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml
+          docker run --rm -v "$PWD/docker/prometheus:/etc/prometheus:ro" --entrypoint promtool prom/prometheus:v3.15.1 test rules /etc/prometheus/alerts.test.yml
+      - name: Check Alertmanager config
+        run: docker run --rm -v "$PWD/docker/alertmanager:/etc/alertmanager:ro" --entrypoint amtool prom/alertmanager:v0.34.2 check-config /etc/alertmanager/alertmanager.yml
+
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 5

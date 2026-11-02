@@ -52,12 +52,14 @@ public class RateLimitTests : IClassFixture<RateLimitTests.LowLimitFactory>, ICl
         Assert.Equal(HttpStatusCode.TooManyRequests, third.StatusCode);
     }
 
-    [Fact]
-    public async Task Health_check_needs_no_login_and_is_not_rate_limited()
+    [Theory]
+    [InlineData("/health")]
+    [InlineData("/metrics")]
+    public async Task Monitoring_needs_no_login_and_is_not_rate_limited(string path)
     {
         for (var i = 0; i < 5; i++)
         {
-            var response = await _client.GetAsync("/health");
+            var response = await _client.GetAsync(path);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
     }

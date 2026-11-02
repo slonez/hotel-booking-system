@@ -1,0 +1,54 @@
+groups:
+  - name: hotel-booking
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is down"
+
+      - alert: ServiceUnhealthy
+        expr: aspnetcore_healthcheck_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }}: health check {{ $labels.name }} is failing"
+
+      - alert: DeadLetters
+        expr: rabbitmq_queue_messages{queue=~".+\\.dead"} > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} messages in {{ $labels.queue }}"
+          description: "They wait for manual handling. See Dead letters in the README."
+
+      - alert: OutboxStuck
+        expr: hotel_outbox_oldest_message_age_seconds > 120
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }}: outbox has not published for over 2 minutes"
+          description: "RabbitMQ is down, or no queue is bound for the oldest message."
+
+      - alert: RefundFailed
+        expr: hotel_refunds_failed > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} refunds need manual handling"
+
+      # Filters out monitoring instead of matching /api: the exception handler clears the route,
+      # so requests that end in an error have an empty endpoint label.
+      - alert: GatewayErrors
+        expr: |
+          sum(rate(http_requests_received_total{job="gateway",endpoint!~"/health|/metrics",code=~"5.."}[5m]))
+            / sum(rate(http_requests_received_total{job="gateway",endpoint!~"/health|/metrics"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Over 5 % of API requests fail"

@@ -57,6 +57,9 @@ but needs ports 80 and 443.
 3. Open https://localhost and accept the browser's warning about Caddy's local certificate.
    Emails: http://localhost:8026. RabbitMQ: http://localhost:15673 (guest/guest).
 
+Monitoring: Grafana http://localhost:3000 (admin/admin), Prometheus http://localhost:9090, Alertmanager http://localhost:9093.
+Alerts arrive as emails in Mailpit.
+
 Stop with `docker compose -f docker-compose.prod.yml --env-file .env.prod down`. Add `-v` to delete the data.
 
 ## Dead letters

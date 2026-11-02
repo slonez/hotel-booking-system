@@ -1,6 +1,7 @@
 using HotelBooking.Contracts.Events;
 using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Prometheus;
 using PaymentService;
 using PaymentService.Data;
 using Stripe;
@@ -12,7 +13,7 @@ builder.Services.AddGrpc();
 builder.Services.AddGrpcReflection();
 builder.Services.AddDbContext<PaymentDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("PaymentDb")));
-builder.Services.AddHealthChecks().AddDbContextCheck<PaymentDbContext>();
+builder.Services.AddHealthChecks().AddDbContextCheck<PaymentDbContext>().ForwardToPrometheus();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddOutboxPublisher<PaymentDbContext>();
 builder.Services.AddEventConsumer<RefundRequested, RefundRequestedHandler>(
@@ -37,6 +38,7 @@ if (app.Environment.IsDevelopment())
     app.MapGrpcReflectionService();
 
 app.MapHealthChecks("/health");
+app.MapMetrics();
 app.MapGrpcService<PaymentsService>();
 app.MapPost("/stripe/webhook", StripeWebhook.HandleAsync);
 

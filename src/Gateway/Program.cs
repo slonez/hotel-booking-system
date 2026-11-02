@@ -4,6 +4,7 @@ using Gateway;
 using HotelBooking.Contracts.Booking;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,6 +53,9 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+// Before the exception handler, so errors are counted with the status code the client gets.
+app.UseRouting();
+app.UseHttpMetrics();
 app.UseExceptionHandler();
 if (useForwardedHeaders)
     app.UseForwardedHeaders();
@@ -59,8 +63,9 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Not rate limited, so monitoring keeps working. Caddy does not route this path, so it stays internal.
+// Not rate limited, so monitoring keeps working. Caddy does not route these paths, so they stay internal.
 app.MapHealthChecks("/health").DisableRateLimiting();
+app.MapMetrics().DisableRateLimiting();
 
 app.MapGet("/api/search", async (string city, string checkIn, string checkOut,
     Bookings.BookingsClient bookings, CancellationToken ct) =>

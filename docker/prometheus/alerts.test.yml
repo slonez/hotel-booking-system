@@ -1,0 +1,120 @@
+# Run: promtool test rules alerts.test.yml
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 15s
+
+tests:
+  - name: Short interruptions do not alert, longer ones do
+    interval: 15s
+    input_series:
+      - series: 'up{job="booking"}'
+        values: '0x3 1x3 0x8'
+    alert_rule_test:
+      - eval_time: 45s
+        alertname: ServiceDown
+        exp_alerts: []
+      - eval_time: 195s
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels: { alertname: ServiceDown, severity: critical, job: booking }
+            exp_annotations: { summary: "booking is down" }
+
+  - name: Failing health check alerts after a minute
+    interval: 15s
+    input_series:
+      - series: 'aspnetcore_healthcheck_status{job="payment",name="consumer payment.refund-requested"}'
+        values: '0x6'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: ServiceUnhealthy
+        exp_alerts: []
+      - eval_time: 75s
+        alertname: ServiceUnhealthy
+        exp_alerts:
+          - exp_labels: { alertname: ServiceUnhealthy, severity: critical, job: payment, name: "consumer payment.refund-requested" }
+            exp_annotations: { summary: "payment: health check consumer payment.refund-requested is failing" }
+
+  - name: Dead letter queues alert at once, work queues never
+    interval: 15s
+    input_series:
+      - series: 'rabbitmq_queue_messages{queue="booking.payment-succeeded.dead"}'
+        values: '2x2'
+      - series: 'rabbitmq_queue_messages{queue="booking.payment-succeeded"}'
+        values: '5x2'
+    alert_rule_test:
+      - eval_time: 15s
+        alertname: DeadLetters
+        exp_alerts:
+          - exp_labels: { alertname: DeadLetters, severity: critical, queue: booking.payment-succeeded.dead }
+            exp_annotations:
+              summary: "2 messages in booking.payment-succeeded.dead"
+              description: "They wait for manual handling. See Dead letters in the README."
+
+  - name: Outbox alerts only when a message stays old
+    interval: 15s
+    input_series:
+      - series: 'hotel_outbox_oldest_message_age_seconds{job="booking"}'
+        values: '100+15x10'
+      - series: 'hotel_outbox_oldest_message_age_seconds{job="payment"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: OutboxStuck
+        exp_alerts: []
+      - eval_time: 90s
+        alertname: OutboxStuck
+        exp_alerts:
+          - exp_labels: { alertname: OutboxStuck, severity: critical, job: booking }
+            exp_annotations:
+              summary: "booking: outbox has not published for over 2 minutes"
+              description: "RabbitMQ is down, or no queue is bound for the oldest message."
+
+  - name: Failed refund alerts at once and clears when handled
+    interval: 15s
+    input_series:
+      - series: 'hotel_refunds_failed{job="payment"}'
+        values: '0 1 1 0'
+    alert_rule_test:
+      - eval_time: 0s
+        alertname: RefundFailed
+        exp_alerts: []
+      - eval_time: 15s
+        alertname: RefundFailed
+        exp_alerts:
+          - exp_labels: { alertname: RefundFailed, severity: critical, job: payment }
+            exp_annotations: { summary: "1 refunds need manual handling" }
+      - eval_time: 45s
+        alertname: RefundFailed
+        exp_alerts: []
+
+  - name: Gateway errors count only API requests and need 5 percent
+    interval: 1m
+    input_series:
+      - series: 'http_requests_received_total{job="gateway",endpoint="/api/search",code="200"}'
+        values: '0+60x20'
+      - series: 'http_requests_received_total{job="gateway",endpoint="",code="500"}'
+        values: '0+12x20'
+      - series: 'http_requests_received_total{job="gateway",endpoint="/metrics",code="200"}'
+        values: '0+6000x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: GatewayErrors
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: GatewayErrors
+        exp_alerts:
+          - exp_labels: { alertname: GatewayErrors, severity: warning }
+            exp_annotations: { summary: "Over 5 % of API requests fail" }
+
+  - name: A low error rate does not alert
+    interval: 1m
+    input_series:
+      - series: 'http_requests_received_total{job="gateway",endpoint="/api/search",code="200"}'
+        values: '0+100x20'
+      - series: 'http_requests_received_total{job="gateway",endpoint="",code="500"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: GatewayErrors
+        exp_alerts: []

@@ -4,6 +4,7 @@ using HotelBooking.Contracts.Events;
 using HotelBooking.Contracts.Payment;
 using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,7 +16,7 @@ builder.Services.AddGrpcClient<Payments.PaymentsClient>(options =>
     options.Address = new Uri(builder.Configuration["Services:Payment"]!))
     // Calls made while handling a request inherit its deadline and cancellation.
     .EnableCallContextPropagation();
-builder.Services.AddHealthChecks().AddDbContextCheck<BookingDbContext>();
+builder.Services.AddHealthChecks().AddDbContextCheck<BookingDbContext>().ForwardToPrometheus();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HoldExpiryJob>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HoldExpiryJob>());
@@ -36,6 +37,7 @@ if (app.Environment.IsDevelopment())
     app.MapGrpcReflectionService();
 
 app.MapHealthChecks("/health");
+app.MapMetrics();
 app.MapGrpcService<BookingsService>();
 
 app.Run();

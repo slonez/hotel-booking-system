@@ -6,7 +6,7 @@ Phase 7 — Production Readiness
 
 ## Next step
 
-Phase 7 step 4: Prometheus, Grafana and alerts. Step 5 replaces the fixed database and RabbitMQ passwords in `docker-compose.prod.yml`.
+Phase 7 step 5: secrets (fixed database, RabbitMQ and Grafana passwords in `docker-compose.prod.yml`), migrations and backups.
 
 ## Confirmed decisions
 
@@ -86,6 +86,7 @@ Phase 7 step 4: Prometheus, Grafana and alerts. Step 5 replaces the fixed databa
 - `Database:MigrateOnStartup` (default: on in Development). `ForwardedHeaders:Enabled` on the Gateway only behind the proxy; the header is trusted from any address, so the Gateway must not be reachable otherwise.
 - Health: built-in health checks, one `/health` per service, used by compose. Booking, Payment and Notification check their database and each consumer's RabbitMQ channel. SMTP and Stripe are left out: their outages are handled by retries and should not mark a service unhealthy. Gateway does not check Booking, so one outage does not cascade. Booking has an HTTP/1 port 5233 besides gRPC on 5232, because curl and Prometheus do not speak cleartext HTTP/2.
 - Logs: built-in JSON console formatter, turned on by configuration in `docker-compose.prod.yml`. Development keeps readable logs. EF SQL logging is at Warning because the outbox polls every second.
+- Monitoring: `prometheus-net` `/metrics` on every service, RabbitMQ's own per-queue metrics, Prometheus rules in `docker/prometheus/alerts.yml` with `promtool` tests in CI, Alertmanager emails to Mailpit, provisioned Grafana dashboard. Alerts: service down or unhealthy, dead letters, stuck outbox, failed refunds, Gateway 5xx over 5 %. Gateway metrics filter out `/health` and `/metrics` rather than matching `/api`, because errors have an empty endpoint label.
 - CI: GitHub Actions runs backend tests and frontend lint and build on pushes and pull requests.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
@@ -101,7 +102,6 @@ Phase 7 step 4: Prometheus, Grafana and alerts. Step 5 replaces the fixed databa
 - Trace IDs do not follow messages through RabbitMQ; logs of one flow connect through `BookingId` and `MessageId`.
 - Accepted in Phase 6 review: on the very first deploy, `RefundRequested` published before Notification has declared its queue reaches Payment only, so that email is lost (mandatory passes because Payment's queue is bound). Emails from different queues can arrive out of order.
 - Phase 6 or later: the customer sees the requested refund amount, not whether the refund succeeded.
-- Phase 7: alert on `Failed` refunds and non-empty dead letter queues.
 - If deployed publicly later (VPS, domain, automatic deploy): start Notification Service before a Booking version that publishes a new event, otherwise Booking's outbox stops at it. Real SMTP provider with TLS required. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
 
 ## Log
@@ -162,3 +162,4 @@ Phase 7 step 4: Prometheus, Grafana and alerts. Step 5 replaces the fixed databa
 - 2026-11-02: First CI run failed on an intermittent cleanup error: the host called `StopAsync` several times at once and closed a RabbitMQ connection in use. Consumer and publisher now close once.
 - 2026-11-02: Phase 7 step 2 done: whole system in containers behind Caddy, smoke tested (search, webhook route, message from RabbitMQ to Mailpit); user verified the flow in the browser with real Clerk and Stripe test mode.
 - 2026-11-02: Phase 7 step 3 done: health checks and JSON logs. 123 tests passing; in containers `/health` goes to 503 when PostgreSQL or RabbitMQ stops and back to 200 after.
+- 2026-11-02: Phase 7 step 4 done: metrics, alerts and Grafana dashboard. 128 tests passing; `DeadLetters` and `ServiceDown` fired in containers and arrived as emails.
