@@ -1,0 +1,10 @@
+**/bin
+**/obj
+**/node_modules
+frontend/dist
+frontend/.env*
+.git
+.github
+.idea
+docs
+tests

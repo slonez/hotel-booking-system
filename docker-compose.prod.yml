@@ -1,0 +1,136 @@
+# The whole system in containers, in a production-like setup. Run with:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# Only Caddy is reachable from outside. The admin UIs listen on this machine only,
+# on other ports than docker-compose.yml, so both setups can run at the same time.
+name: hotel-booking-prod
+
+x-service: &service
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+x-production: &production
+  ASPNETCORE_ENVIRONMENT: Production
+  Database__MigrateOnStartup: "true"
+  ConnectionStrings__RabbitMq: amqp://guest:guest@rabbitmq:5672
+
+services:
+  caddy:
+    build:
+      context: .
+      dockerfile: docker/caddy/Dockerfile
+      args:
+        CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:?}
+    restart: unless-stopped
+    depends_on:
+      - gateway
+      - payment
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Keeps Caddy's local CA, so the certificate stays the same across restarts.
+      - caddy-data:/data
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        PROJECT: Gateway
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "5172"
+      Services__Booking: http://booking:5232
+      # Only Caddy can reach the Gateway, so its X-Forwarded-For header can be trusted.
+      ForwardedHeaders__Enabled: "true"
+
+  booking:
+    <<: *service
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        PROJECT: BookingService
+    environment:
+      <<: *production
+      ASPNETCORE_HTTP_PORTS: "5232"
+      ConnectionStrings__BookingDb: Host=postgres;Database=booking;Username=booking;Password=booking
+      Services__Payment: http://payment:5242
+
+  payment:
+    <<: *service
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        PROJECT: PaymentService
+    environment:
+      <<: *production
+      Kestrel__Endpoints__Grpc__Url: http://+:5242
+      Kestrel__Endpoints__Webhooks__Url: http://+:5243
+      ConnectionStrings__PaymentDb: Host=postgres;Database=payment;Username=payment;Password=payment
+      Stripe__SecretKey: ${STRIPE_SECRET_KEY:?}
+      Stripe__WebhookSecret: ${STRIPE_WEBHOOK_SECRET:?}
+      Stripe__SuccessUrl: https://localhost/?payment=success
+      Stripe__CancelUrl: https://localhost/?payment=cancelled
+
+  notification:
+    <<: *service
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        PROJECT: NotificationService
+    environment:
+      <<: *production
+      Kestrel__Endpoints__Http__Url: http://+:5252
+      ConnectionStrings__NotificationDb: Host=postgres;Database=notification;Username=notification;Password=notification
+      Smtp__Host: mailpit
+      Smtp__Port: "1025"
+
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      # Over TCP: during init scripts PostgreSQL listens only on its socket.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+    healthcheck:
+      # A port check, not rabbitmq-diagnostics: run as root before the broker has started,
+      # the CLI creates an Erlang cookie the broker cannot read, and the broker fails to start.
+      test: ["CMD", "bash", "-c", "</dev/tcp/localhost/5672"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+    ports:
+      - "127.0.0.1:15673:15672"   # Management UI (guest/guest)
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+  mailpit:
+    image: axllent/mailpit:v1.33
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8026:8025"     # Web UI for caught emails
+
+volumes:
+  caddy-data:
+  postgres-data:
+  rabbitmq-data:

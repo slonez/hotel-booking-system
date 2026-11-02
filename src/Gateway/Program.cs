@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using Gateway;
 using HotelBooking.Contracts.Booking;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,7 +25,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
-// Per client IP. Behind a reverse proxy this needs forwarded headers (Phase 7).
+// Turn on only when a reverse proxy is the only way to reach the Gateway: the header is then trusted
+// from any address. Otherwise clients could fake their IP and get around the rate limit.
+var useForwardedHeaders = builder.Configuration.GetValue<bool>("ForwardedHeaders:Enabled");
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// Per client IP.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -41,6 +52,8 @@ builder.Services.AddRateLimiter(options =>
 var app = builder.Build();
 
 app.UseExceptionHandler();
+if (useForwardedHeaders)
+    app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

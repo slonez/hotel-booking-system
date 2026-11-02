@@ -1,0 +1,19 @@
+localhost {
+	# A certificate from Caddy's own local CA. Browsers warn about it until the CA is trusted.
+	tls internal
+
+	handle /api/* {
+		reverse_proxy gateway:5172
+	}
+
+	handle /stripe/webhook {
+		reverse_proxy payment:5243
+	}
+
+	handle {
+		root * /srv
+		# Unknown paths get the React app.
+		try_files {path} /index.html
+		file_server
+	}
+}

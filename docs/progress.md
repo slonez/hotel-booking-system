@@ -6,7 +6,7 @@ Phase 7 — Production Readiness
 
 ## Next step
 
-Phase 7 step 2: containers and Caddy, whole system with one `docker compose` command.
+Phase 7 step 3: health checks and structured logs. Step 5 replaces the fixed database and RabbitMQ passwords in `docker-compose.prod.yml`.
 
 ## Confirmed decisions
 
@@ -59,7 +59,7 @@ Phase 7 step 2: containers and Caddy, whole system with one `docker compose` com
 - gRPC errors: unknown room type → `NotFound`, no rooms → `FailedPrecondition`, invalid input → `InvalidArgument`.
 - Gateway: Minimal API, REST → gRPC via `AddGrpcClient`. gRPC errors mapped to ProblemDetails in `GrpcExceptionHandler`. Gateway tests use a fake Bookings client.
 - Gateway auth: JWT bearer with Clerk as authority, no audience validation, `MapInboundClaims = false`. Booking endpoint requires `email` claim.
-- Rate limiting: global fixed window per client IP (default 100/min). Forwarded headers needed behind reverse proxy (Phase 7).
+- Rate limiting: global fixed window per client IP (default 100/min).
 - Frontend: Vite + React + TypeScript, `@clerk/react` v6. Vite dev server proxies `/api` to the Gateway (no CORS in development). Single page: search, sign in, book.
 - Hold expiry: `HoldExpiryJob` (BackgroundService), runs every minute, one atomic `ExecuteUpdate` (`Held` + `ExpiresAt <= now` → `Expired`). Errors are logged; next tick retries.
 - Tests: WebApplicationFactory + Testcontainers (real PostgreSQL), `FakeTimeProvider` for time. Booking tests share one container (xUnit collection fixture) and clear bookings before each test.
@@ -82,6 +82,8 @@ Phase 7 step 2: containers and Caddy, whole system with one `docker compose` com
 - Refunds: `RefundRequested` consumer only saves a Pending `Refunds` row (unique `PaymentId` stops duplicates). A separate `RefundProcessor` job calls Stripe.
 - Background loops and consumers treat an exception as shutdown only when their own token is cancelled, so a timeout is logged and retried.
 - Phase 7 runs locally, without a VPS: little new to learn compared to its cost. Caddy with a local certificate, Mailpit for email, `stripe listen` for webhooks. JSON console logs (built in), `prometheus-net`, migrations at startup behind a setting.
+- Containers: `docker-compose.prod.yml` (own project and volumes, runs alongside dev), one `docker/service.Dockerfile` with a `PROJECT` build arg, services run as non-root. Caddy serves the frontend on HTTPS (local CA) and routes `/api/*` to Gateway and `/stripe/webhook` to Payment. Only Caddy publishes ports to all interfaces; admin UIs on 127.0.0.1.
+- `Database:MigrateOnStartup` (default: on in Development). `ForwardedHeaders:Enabled` on the Gateway only behind the proxy; the header is trusted from any address, so the Gateway must not be reachable otherwise.
 - CI: GitHub Actions runs backend tests and frontend lint and build on pushes and pull requests.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
@@ -155,3 +157,4 @@ Phase 7 step 2: containers and Caddy, whole system with one `docker compose` com
 - 2026-11-02: Phase 7 started.
 - 2026-11-02: Phase 7 scope changed: no VPS for now. Step 1: CI workflow added.
 - 2026-11-02: First CI run failed on an intermittent cleanup error: the host called `StopAsync` several times at once and closed a RabbitMQ connection in use. Consumer and publisher now close once.
+- 2026-11-02: Phase 7 step 2 done: whole system in containers behind Caddy, smoke tested (search, webhook route, message from RabbitMQ to Mailpit); user verified the flow in the browser with real Clerk and Stripe test mode.

@@ -19,7 +19,8 @@ builder.Services.AddEventConsumer<RefundRequested, RefundRequestedHandler>(
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// One instance per service, so concurrent migrations are not a concern.
+if (app.Configuration.GetValue("Database:MigrateOnStartup", app.Environment.IsDevelopment()))
 {
     using var scope = app.Services.CreateScope();
     scope.ServiceProvider.GetRequiredService<NotificationDbContext>().Database.Migrate();

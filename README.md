@@ -42,6 +42,23 @@ dotnet run --project src/Gateway            # REST on http://localhost:5172
 cd frontend && npm run dev                  # http://localhost:5173
 ```
 
+## Run in containers
+
+The whole system in a production-like setup: Caddy on HTTPS is the only way in. It runs alongside the setup above,
+but needs ports 80 and 443.
+
+1. `cp .env.prod.example .env.prod` and fill in the values.
+2. Start:
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+   stripe listen --events checkout.session.completed,checkout.session.expired,checkout.session.async_payment_succeeded \
+     --forward-to https://localhost/stripe/webhook --skip-verify
+   ```
+3. Open https://localhost and accept the browser's warning about Caddy's local certificate.
+   Emails: http://localhost:8026. RabbitMQ: http://localhost:15673 (guest/guest).
+
+Stop with `docker compose -f docker-compose.prod.yml --env-file .env.prod down`. Add `-v` to delete the data.
+
 ## Dead letters
 
 A message that cannot be handled ends up in `<queue>.dead`. Fix the cause, then move the messages back.

@@ -25,13 +25,15 @@ builder.Services.AddSingleton(sp => new RefundService(sp.GetRequiredService<IStr
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// One instance per service, so concurrent migrations are not a concern.
+if (app.Configuration.GetValue("Database:MigrateOnStartup", app.Environment.IsDevelopment()))
 {
-    using (var scope = app.Services.CreateScope())
-        scope.ServiceProvider.GetRequiredService<PaymentDbContext>().Database.Migrate();
-
-    app.MapGrpcReflectionService();
+    using var scope = app.Services.CreateScope();
+    scope.ServiceProvider.GetRequiredService<PaymentDbContext>().Database.Migrate();
 }
+
+if (app.Environment.IsDevelopment())
+    app.MapGrpcReflectionService();
 
 app.MapGrpcService<PaymentsService>();
 app.MapPost("/stripe/webhook", StripeWebhook.HandleAsync);
