@@ -7,6 +7,10 @@
 .env
 .env.prod
 
+# Database backups
+backups/*
+!backups/.gitkeep
+
 # User-specific files
 *.rsuser
 *.suo

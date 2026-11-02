@@ -47,7 +47,7 @@ cd frontend && npm run dev                  # http://localhost:5173
 The whole system in a production-like setup: Caddy on HTTPS is the only way in. It runs alongside the setup above,
 but needs ports 80 and 443.
 
-1. `cp .env.prod.example .env.prod` and fill in the values.
+1. `cp .env.prod.example .env.prod`, `chmod 600 .env.prod` and fill in the values.
 2. Start:
    ```bash
    docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
@@ -55,12 +55,37 @@ but needs ports 80 and 443.
      --forward-to https://localhost/stripe/webhook --skip-verify
    ```
 3. Open https://localhost and accept the browser's warning about Caddy's local certificate.
-   Emails: http://localhost:8026. RabbitMQ: http://localhost:15673 (guest/guest).
+   Emails: http://localhost:8026. RabbitMQ: http://localhost:15673 (user `hotel`).
 
-Monitoring: Grafana http://localhost:3000 (admin/admin), Prometheus http://localhost:9090, Alertmanager http://localhost:9093.
+Monitoring: Grafana http://localhost:3000 (user `admin`), Prometheus http://localhost:9090, Alertmanager http://localhost:9093.
 Alerts arrive as emails in Mailpit.
 
 Stop with `docker compose -f docker-compose.prod.yml --env-file .env.prod down`. Add `-v` to delete the data.
+
+PostgreSQL and RabbitMQ read their passwords only when their volumes are first created. To change one on existing
+data, change it inside the service too (`ALTER USER`, `rabbitmqctl change_password`).
+
+## Backup and restore
+
+The `backup` container dumps each database to `backups/<timestamp>/` at every start and once a day, and removes
+backups older than 7 days. The folder survives `down -v`, but it is on this machine only: copy it elsewhere for
+real protection. Backup failures appear only in `docker compose logs backup`.
+
+Take a backup by hand before anything risky, such as a new version with migrations. Migrations run forward only:
+the way back from a bad one is a restore.
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec backup /backup.sh
+docker/postgres/restore.sh <timestamp>
+```
+
+After a restore:
+
+- Changes made after the backup are gone, also in Stripe's direction: a payment made after it is known to Stripe but
+  not to us. Compare recent payments in the Stripe dashboard. Stripe can resend their events.
+- Booking and Payment are dumped one after the other, so they can differ by a moment. An unpublished outbox
+  message is sent again, which is safe because consumers are idempotent.
+- Emails in a restored state can go out again, because the log of sent emails is also restored.
 
 ## Dead letters
 
