@@ -22,6 +22,7 @@ public class OutboxPublisher<TContext>(
 
     private IConnection? _connection;
     private IChannel? _channel;
+    private int _stopped;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -93,6 +94,10 @@ public class OutboxPublisher<TContext>(
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         await base.StopAsync(cancellationToken);
+        // The host can call this several times at once, as WebApplicationFactory does. Closing the
+        // connection while another call is still closing the channel would throw, so only the first call closes.
+        if (Interlocked.Exchange(ref _stopped, 1) == 1)
+            return;
         if (_channel is not null)
             await _channel.DisposeAsync();
         if (_connection is not null)

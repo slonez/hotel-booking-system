@@ -154,3 +154,4 @@ Phase 7 step 2: containers and Caddy, whole system with one `docker compose` com
 - 2026-11-02: Phase 6 reviewed, remaining items accepted under "Later". 116 tests passing. Phase 6 complete.
 - 2026-11-02: Phase 7 started.
 - 2026-11-02: Phase 7 scope changed: no VPS for now. Step 1: CI workflow added.
+- 2026-11-02: First CI run failed on an intermittent cleanup error: the host called `StopAsync` several times at once and closed a RabbitMQ connection in use. Consumer and publisher now close once.
