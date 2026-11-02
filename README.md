@@ -42,6 +42,18 @@ dotnet run --project src/Gateway            # REST on http://localhost:5172
 cd frontend && npm run dev                  # http://localhost:5173
 ```
 
+## Dead letters
+
+A message that cannot be handled ends up in `<queue>.dead`. Fix the cause, then move the messages back.
+Handlers are idempotent, so this is safe. The shovel removes itself when the queue is empty.
+
+```bash
+docker compose exec rabbitmq rabbitmq-plugins enable rabbitmq_shovel
+docker compose exec rabbitmq rabbitmqctl set_parameter shovel replay-dead-letters \
+  '{"src-protocol":"amqp091","src-uri":"amqp://","src-queue":"booking.payment-succeeded.dead","src-delete-after":"queue-length",
+    "dest-protocol":"amqp091","dest-uri":"amqp://","dest-queue":"booking.payment-succeeded"}'
+```
+
 ## Tests
 
 ```bash

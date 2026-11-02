@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 6 — Asynchronous Messaging and Reliability
+Phase 6 — Asynchronous Messaging and Reliability (complete)
 
 ## Next step
 
-Phase 6 step 4: failure tests and review.
+Phase 7: production readiness.
 
 ## Confirmed decisions
 
@@ -92,6 +92,7 @@ Phase 6 step 4: failure tests and review.
 
 ### Later
 
+- Accepted in Phase 6 review: on the very first deploy, `RefundRequested` published before Notification has declared its queue reaches Payment only, so that email is lost (mandatory passes because Payment's queue is bound). Emails from different queues can arrive out of order.
 - Phase 6 or later: the customer sees the requested refund amount, not whether the refund succeeded.
 - Phase 7: alert on `Failed` refunds and non-empty dead letter queues. Start Notification Service before a Booking version that publishes a new event, otherwise Booking's outbox stops at it. Real SMTP provider. Require TLS for SMTP in production. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
 
@@ -146,3 +147,5 @@ Phase 6 step 4: failure tests and review.
 - 2026-11-02: Phase 6 step 1 done: dead letter queues and retry limit in `src/Messaging`, tested through real RabbitMQ in new `Messaging.Tests`.
 - 2026-11-02: Phase 6 step 2 done: Booking publishes `BookingConfirmed` through the outbox when a booking is confirmed.
 - 2026-11-02: Phase 6 step 3 done: Notification Service sends confirmation, cancellation and late-payment emails (tested through real RabbitMQ, PostgreSQL and Mailpit). 111 tests passing.
+- 2026-11-02: Phase 6 step 4 done: recovery tests through real RabbitMQ and PostgreSQL (crash during handling, RabbitMQ restart, start during outage, dead letter move with a shovel). Dead letter procedure in README.
+- 2026-11-02: Phase 6 reviewed, remaining items accepted under "Later". 116 tests passing. Phase 6 complete.
