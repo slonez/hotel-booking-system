@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 5 — Payment Integration
+Phase 6 — Asynchronous Messaging and Reliability
 
 ## Next step
 
-Phase 6: asynchronous messaging and reliability. Notification Service, `BookingConfirmed`, retry limit and dead letter queue.
+Phase 6 step 2: `BookingConfirmed` from Booking through the outbox. Then step 3: Notification Service; step 4: failure tests and review.
 
 ## Confirmed decisions
 
@@ -42,7 +42,7 @@ Phase 6: asynchronous messaging and reliability. Notification Service, `BookingC
 - Reliable publishing: transactional outbox in Booking and Payment (at-least-once delivery).
 - Idempotent consumers:
   - Booking: state-based, option B (`PaymentSucceeded` moves Held or Expired → Confirmed if a room is free; already Confirmed → ignore). Check + update must be atomic.
-  - Notification: log of sent notifications (by message ID).
+  - Notification: log of sent notifications (unique `BookingId` + type).
   - Payment (Stripe webhooks): state-based, `Pending` → `Succeeded`/`Expired` only (no processed-events table; decided in Phase 5).
 - Booking states: Held, Confirmed, Expired, Cancelled (see `docs/data-and-api-design.md`). Late payment without room stays `Expired` with `RefundAmountCents` set, which also marks duplicate messages.
 - Booking schema: Hotels, RoomTypes (TotalRooms), Bookings (TotalPrice, ExpiresAt).
@@ -75,7 +75,9 @@ Phase 6: asynchronous messaging and reliability. Notification Service, `BookingC
 - Stripe webhook: `POST /stripe/webhook` on a separate HTTP/1.1 port (5243); gRPC stays HTTP/2 on 5242. Signature checked with `EventUtility.ConstructEvent`; secret in user secrets. Local testing with `stripe listen`.
 - Messaging: `RabbitMQ.Client` 7 + own small outbox (not MassTransit), to see how at-least-once works. RabbitMQ 4 in Docker Compose.
 - Outbox (Payment): `OutboxMessages` saved in the webhook transaction only when the payment actually changed to Succeeded. `OutboxPublisher` publishes every second as mandatory with publisher confirms, marks each message after its confirm. Without a bound queue the message stays in the outbox.
-- Booking consumer: `EventConsumer<PaymentSucceeded, PaymentSucceededHandler>` (RabbitMQ, durable queue `booking.payment-succeeded`, prefetch 1, ack after handling, requeue after 5 s on error). Handler logic is tested directly. Late payment re-checks availability under the room type lock, using the time read after the lock.
+- Booking consumer: `EventConsumer<PaymentSucceeded, PaymentSucceededHandler>` (RabbitMQ, durable queue `booking.payment-succeeded`, prefetch 1, ack after handling). Handler logic is tested directly. Late payment re-checks availability under the room type lock, using the time read after the lock.
+- Consumer errors: quorum queues with a dead letter queue `<queue>.dead`. `EventConsumer` makes 20 attempts 5 s apart (about 100 s) while holding the message, then dead letters it; malformed messages go there at once. Own counting because `x-delivery-limit` does not count nacks with requeue. Dead letters are moved back by hand.
+- Notifications (Phase 6): MailKit + Mailpit in compose. Duplicates stopped with unique `(BookingId, Type)` instead of message ID; email is sent first and then logged, so a crash can duplicate an email but not lose it.
 - Refunds: `RefundRequested` consumer only saves a Pending `Refunds` row (unique `PaymentId` stops duplicates). A separate `RefundProcessor` job calls Stripe.
 - Background loops and consumers treat an exception as shutdown only when their own token is cancelled, so a timeout is logged and retried.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
@@ -89,9 +91,9 @@ Phase 6: asynchronous messaging and reliability. Notification Service, `BookingC
 
 ### Later
 
-- Phase 6: a malformed message blocks its queue until a dead letter queue exists. Customers get no notice of a late-payment refund until Notification Service exists.
+- Phase 6: customers get no notice of a late-payment refund until Notification Service exists.
 - Phase 6 or later: the customer sees the requested refund amount, not whether the refund succeeded.
-- Phase 7: alert on `Failed` refunds. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
+- Phase 7: alert on `Failed` refunds and non-empty dead letter queues. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
 
 ## Log
 
@@ -140,3 +142,5 @@ Phase 6: asynchronous messaging and reliability. Notification Service, `BookingC
 - 2026-10-31: Phase 5 step 4b done: Booking outbox; cancellation and late payment without room publish `RefundRequested` (reason `Cancelled`/`LatePayment`). 86 tests passing.
 - 2026-10-31: Phase 5 step 4c done: Payment consumes `RefundRequested` into `Refunds`, `RefundProcessor` refunds through Stripe (idempotency key = refund ID, 5 attempts → Failed); webhook stores `StripePaymentIntentId`. 93 tests passing.
 - 2026-11-01: Phase 5 review fixes: duplicate message cannot confirm a refunded booking, hold expiry checked after the lock (overbooking race), mandatory publishing, timeouts no longer stop background work, webhook signature header → 400, refund wording. 98 tests passing. Phase 5 complete.
+- 2026-11-02: Phase 6 started.
+- 2026-11-02: Phase 6 step 1 done: dead letter queues and retry limit in `src/Messaging`, tested through real RabbitMQ in new `Messaging.Tests`.

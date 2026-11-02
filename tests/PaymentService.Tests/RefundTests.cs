@@ -100,9 +100,7 @@ public class RefundTests(PaymentServiceFactory factory) : IAsyncLifetime
         await using var connection = await new ConnectionFactory { Uri = new Uri(factory.RabbitMqConnectionString) }.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
         // Declared like the consumer does, so the message waits in the queue even if the consumer has not started yet.
-        await channel.ExchangeDeclareAsync(Exchanges.Events, ExchangeType.Topic, durable: true);
-        await channel.QueueDeclareAsync(RefundRequestedHandler.Queue, durable: true, exclusive: false, autoDelete: false);
-        await channel.QueueBindAsync(RefundRequestedHandler.Queue, Exchanges.Events, RefundRequested.RoutingKey);
+        await ConsumerQueue.DeclareAsync(channel, RefundRequestedHandler.Queue, RefundRequested.RoutingKey);
 
         await channel.BasicPublishAsync(Exchanges.Events, RefundRequested.RoutingKey,
             JsonSerializer.SerializeToUtf8Bytes(RefundRequest(12900)));

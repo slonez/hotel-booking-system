@@ -15,7 +15,7 @@ public interface IEventHandler<in TEvent>
 
 // Reads events of one type from RabbitMQ and passes them to the handler. A message is acknowledged
 // only after it has been handled, so if the service crashes in between, RabbitMQ delivers it again.
-// Handlers must therefore be idempotent.
+// Handlers must therefore be idempotent. Messages that keep failing end up in a dead letter queue (ConsumerQueue).
 public class EventConsumer<TEvent, THandler>(
     string queue,
     string routingKey,
@@ -24,7 +24,7 @@ public class EventConsumer<TEvent, THandler>(
     ILogger<EventConsumer<TEvent, THandler>> logger) : BackgroundService
     where THandler : IEventHandler<TEvent>
 {
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _retryDelay = config.GetValue("Messaging:RetryDelay", TimeSpan.FromSeconds(5));
 
     private IConnection? _connection;
     private IChannel? _channel;
@@ -34,9 +34,7 @@ public class EventConsumer<TEvent, THandler>(
         var channel = await ConnectAsync(stoppingToken);
 
         // A durable queue keeps messages while the service is down.
-        await channel.ExchangeDeclareAsync(Exchanges.Events, ExchangeType.Topic, durable: true, cancellationToken: stoppingToken);
-        await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: stoppingToken);
-        await channel.QueueBindAsync(queue, Exchanges.Events, routingKey, cancellationToken: stoppingToken);
+        await ConsumerQueue.DeclareAsync(channel, queue, routingKey, stoppingToken);
         // One message at a time.
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: 1, global: false, stoppingToken);
 
@@ -47,21 +45,59 @@ public class EventConsumer<TEvent, THandler>(
 
     private async Task HandleDeliveryAsync(IChannel channel, BasicDeliverEventArgs delivery, CancellationToken ct)
     {
+        var message = Deserialize(delivery);
+        if (message is null)
+        {
+            // Retrying cannot fix a malformed message.
+            logger.LogError("Message {MessageId} from {Queue} is malformed; dead lettering it",
+                delivery.BasicProperties.MessageId, queue);
+            await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: false, ct);
+            return;
+        }
+
+        if (await TryHandleAsync(message, delivery, ct))
+            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
+        else
+            await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: false, ct);
+    }
+
+    // Retries while holding the message, so attempts need no storage. If the service crashes,
+    // RabbitMQ delivers the message again and the count starts over.
+    private async Task<bool> TryHandleAsync(TEvent message, BasicDeliverEventArgs delivery, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await using var scope = scopes.CreateAsyncScope();
+                await scope.ServiceProvider.GetRequiredService<THandler>().HandleAsync(message, ct);
+                return true;
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                // E.g. the database is down.
+                if (attempt == ConsumerQueue.MaxAttempts)
+                {
+                    logger.LogError(ex, "Handling message {MessageId} from {Queue} failed {Attempts} times; dead lettering it",
+                        delivery.BasicProperties.MessageId, queue, attempt);
+                    return false;
+                }
+                logger.LogWarning(ex, "Handling message {MessageId} from {Queue} failed; retrying in {Delay}",
+                    delivery.BasicProperties.MessageId, queue, _retryDelay);
+                await Task.Delay(_retryDelay, ct);
+            }
+        }
+    }
+
+    private static TEvent? Deserialize(BasicDeliverEventArgs delivery)
+    {
         try
         {
-            var message = JsonSerializer.Deserialize<TEvent>(delivery.Body.Span)!;
-            await using var scope = scopes.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<THandler>().HandleAsync(message, ct);
-            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
+            return JsonSerializer.Deserialize<TEvent>(delivery.Body.Span);
         }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
+        catch (JsonException)
         {
-            // E.g. the database is down. Wait and put the message back for another try.
-            // Phase 6 adds a retry limit and a dead letter queue for messages that never succeed.
-            logger.LogError(ex, "Handling message {MessageId} from {Queue} failed; retrying in {Delay}",
-                delivery.BasicProperties.MessageId, queue, RetryDelay);
-            await Task.Delay(RetryDelay, ct);
-            await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: true, ct);
+            return default;
         }
     }
 
@@ -80,8 +116,8 @@ public class EventConsumer<TEvent, THandler>(
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                logger.LogWarning(ex, "Cannot connect to RabbitMQ; retrying in {Delay}", RetryDelay);
-                await Task.Delay(RetryDelay, ct);
+                logger.LogWarning(ex, "Cannot connect to RabbitMQ; retrying in {Delay}", _retryDelay);
+                await Task.Delay(_retryDelay, ct);
             }
         }
     }
