@@ -31,7 +31,34 @@ public class PaymentSucceededHandlerTests(BookingServiceFactory factory) : IAsyn
         await Handle(booking);
 
         Assert.Equal(BookingStatus.Confirmed, await GetStatus(booking));
-        Assert.Equal(0, await factory.CountOutboxMessagesAsync());
+        Assert.Equal(
+            new BookingConfirmed(booking.Id, "user_test@example.com", "Seaside Hotel", "Suite",
+                new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 12), booking.TotalPriceCents),
+            await factory.SingleOutboxMessageAsync<BookingConfirmed>(BookingConfirmed.RoutingKey));
+    }
+
+    [Fact]
+    public async Task Duplicate_message_publishes_one_confirmation()
+    {
+        var booking = factory.NewBooking(BookingStatus.Held, roomTypeId: SeasideSuite);
+        await factory.AddBookingsAsync(booking);
+
+        await Handle(booking);
+        await Handle(booking);
+
+        Assert.Equal(1, await factory.CountOutboxMessagesAsync());
+    }
+
+    [Fact]
+    public async Task Concurrent_duplicates_publish_one_confirmation()
+    {
+        var booking = factory.NewBooking(BookingStatus.Held, roomTypeId: SeasideSuite);
+        await factory.AddBookingsAsync(booking);
+
+        await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => Handle(booking)));
+
+        Assert.Equal(BookingStatus.Confirmed, await GetStatus(booking));
+        Assert.Equal(1, await factory.CountOutboxMessagesAsync());
     }
 
     [Fact]
@@ -101,6 +128,7 @@ public class PaymentSucceededHandlerTests(BookingServiceFactory factory) : IAsyn
         await Handle(booking);
 
         Assert.Equal(status, await GetStatus(booking));
+        Assert.Equal(0, await factory.CountOutboxMessagesAsync());
     }
 
     [Fact]

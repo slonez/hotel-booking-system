@@ -72,12 +72,18 @@ public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILo
         }
 
         // Atomic: the status condition protects against a concurrent duplicate message.
-        await db.Bookings
+        var confirmed = await db.Bookings
             .Where(b => b.Id == booking.Id && b.RefundAmountCents == null
                 && (b.Status == BookingStatus.Held || b.Status == BookingStatus.Expired))
             .ExecuteUpdateAsync(s => s.SetProperty(b => b.Status, BookingStatus.Confirmed), ct);
+        if (confirmed > 0)
+        {
+            logger.LogInformation("Booking {BookingId} confirmed by payment {PaymentId}", booking.Id, message.PaymentId);
+            db.OutboxMessages.Add(OutboxMessage.Create(BookingConfirmed.RoutingKey,
+                new BookingConfirmed(booking.Id, booking.Email, booking.RoomType.Hotel.Name, booking.RoomType.Name,
+                    booking.CheckInDate, booking.CheckOutDate, booking.TotalPriceCents), now));
+            await db.SaveChangesAsync(ct);
+        }
         await transaction.CommitAsync(ct);
-
-        logger.LogInformation("Booking {BookingId} confirmed by payment {PaymentId}", booking.Id, message.PaymentId);
     }
 }

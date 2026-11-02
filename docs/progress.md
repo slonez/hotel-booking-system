@@ -6,7 +6,7 @@ Phase 6 — Asynchronous Messaging and Reliability
 
 ## Next step
 
-Phase 6 step 2: `BookingConfirmed` from Booking through the outbox. Then step 3: Notification Service; step 4: failure tests and review.
+Phase 6 step 3: Notification Service. Until it has declared its queue, Booking's outbox stops at the first `BookingConfirmed`. Then step 4: failure tests and review.
 
 ## Confirmed decisions
 
@@ -144,3 +144,4 @@ Phase 6 step 2: `BookingConfirmed` from Booking through the outbox. Then step 3:
 - 2026-11-01: Phase 5 review fixes: duplicate message cannot confirm a refunded booking, hold expiry checked after the lock (overbooking race), mandatory publishing, timeouts no longer stop background work, webhook signature header → 400, refund wording. 98 tests passing. Phase 5 complete.
 - 2026-11-02: Phase 6 started.
 - 2026-11-02: Phase 6 step 1 done: dead letter queues and retry limit in `src/Messaging`, tested through real RabbitMQ in new `Messaging.Tests`.
+- 2026-11-02: Phase 6 step 2 done: Booking publishes `BookingConfirmed` through the outbox when a booking is confirmed.

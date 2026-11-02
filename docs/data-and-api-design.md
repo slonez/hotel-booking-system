@@ -115,13 +115,13 @@ All events go through the outbox (at-least-once). Consumers are idempotent.
 - RabbitMQ: one durable topic exchange `hotel-booking`; routing key = event type (`payment.succeeded`). Persistent messages, `MessageId` = outbox `Id`. Each consumer declares its own durable quorum queue and a dead letter queue `<queue>.dead` (at-least-once dead lettering). Messages are published as mandatory: if no queue is bound yet, the message stays in the outbox and blocks later ones until a consumer has declared its queue.
 - Booking consumes `payment.succeeded` from durable queue `booking.payment-succeeded` (prefetch 1, ack after handling).
 - Consumer errors: `EventConsumer` retries while holding the message, up to 20 attempts 5 s apart (about 100 s), then dead letters it. A malformed message is dead lettered at once. A crash redelivers the message and restarts the count. RabbitMQ's `x-delivery-limit` is not used: RabbitMQ 4.4 did not count nacks with requeue towards it (a test reached 1872 deliveries without dead lettering). Dead letters are moved back by hand, which is safe because handlers are idempotent.
-- `PaymentSucceeded` handling: Held with a valid hold → Confirmed. Held past `ExpiresAt` or Expired → availability checked again under the room type lock (`FOR UPDATE`); room free → Confirmed, otherwise Expired with `RefundAmountCents` set and `RefundRequested` (`LatePayment`, full amount) in the outbox. Confirmed/Cancelled or `RefundAmountCents` already set → ignored (duplicate). Updates use `WHERE Status IN (Held, Expired) AND RefundAmountCents IS NULL`. The current time is read after the lock is acquired.
+- `PaymentSucceeded` handling: Held with a valid hold → Confirmed, with `BookingConfirmed` in the outbox in the same transaction. Held past `ExpiresAt` or Expired → availability checked again under the room type lock (`FOR UPDATE`); room free → Confirmed (also `BookingConfirmed`), otherwise Expired with `RefundAmountCents` set and `RefundRequested` (`LatePayment`, full amount) in the outbox. Confirmed/Cancelled or `RefundAmountCents` already set → ignored (duplicate). Updates use `WHERE Status IN (Held, Expired) AND RefundAmountCents IS NULL`. The current time is read after the lock is acquired.
 - Event payload records live in `src/Contracts/Events` (linked into each service like the protos). Outbox publisher and consumer code is shared through `src/Messaging`.
 
 | Event | Publisher | Consumers | Payload |
 |---|---|---|---|
 | `PaymentSucceeded` | Payment | Booking | BookingId, PaymentId, Amount |
-| `BookingConfirmed` | Booking | Notification | BookingId, Email, HotelName, RoomTypeName, CheckInDate, CheckOutDate, TotalPrice |
+| `BookingConfirmed` | Booking | Notification | BookingId, Email, HotelName, RoomTypeName, CheckInDate, CheckOutDate, TotalPriceCents |
 | `RefundRequested` | Booking | Payment, Notification | BookingId, Email, HotelName, RoomTypeName, Amount, Reason (`Cancelled` \| `LatePayment`) |
 
 - Cancellation and late payment without room both use `RefundRequested`. Notification picks the email text from `Reason`.
