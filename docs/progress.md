@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 7 — Production Readiness
+Phase 7 — Production Readiness (complete)
 
 ## Next step
 
-Phase 7 step 6: startup and recovery documentation, then Phase 7 review.
+Phase 8: architecture review.
 
 ## Confirmed decisions
 
@@ -101,6 +101,7 @@ Phase 7 step 6: startup and recovery documentation, then Phase 7 review.
 
 ### Later
 
+- `ServiceUnhealthy`, `OutboxStuck`, `RefundFailed` and `GatewayErrors` are tested with `promtool` and metric tests, but not fired in containers. `stripe events resend` in `docs/operations.md` is untried.
 - No alert when a backup fails: only the container log shows it. Backups stay on the same machine.
 - Trace IDs do not follow messages through RabbitMQ; logs of one flow connect through `BookingId` and `MessageId`.
 - Accepted in Phase 6 review: on the very first deploy, `RefundRequested` published before Notification has declared its queue reaches Payment only, so that email is lost (mandatory passes because Payment's queue is bound). Emails from different queues can arrive out of order.
@@ -167,3 +168,5 @@ Phase 7 step 6: startup and recovery documentation, then Phase 7 review.
 - 2026-11-02: Phase 7 step 3 done: health checks and JSON logs. 123 tests passing; in containers `/health` goes to 503 when PostgreSQL or RabbitMQ stops and back to 200 after.
 - 2026-11-02: Phase 7 step 4 done: metrics, alerts and Grafana dashboard. 128 tests passing; `DeadLetters` and `ServiceDown` fired in containers and arrived as emails.
 - 2026-11-02: Phase 7 step 5 done: passwords from `.env.prod`, daily backups, restore script tested in containers.
+- 2026-11-02: Phase 7 step 6 done: `docs/operations.md` for startup, alerts and recovery; its commands tried in containers.
+- 2026-11-02: Phase 7 reviewed, remaining items accepted under "Later". Phase 7 complete.

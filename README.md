@@ -60,6 +60,8 @@ but needs ports 80 and 443.
 Monitoring: Grafana http://localhost:3000 (user `admin`), Prometheus http://localhost:9090, Alertmanager http://localhost:9093.
 Alerts arrive as emails in Mailpit.
 
+Alerts, failed refunds and other recovery steps: [`docs/operations.md`](docs/operations.md).
+
 Stop with `docker compose -f docker-compose.prod.yml --env-file .env.prod down`. Add `-v` to delete the data.
 
 PostgreSQL and RabbitMQ read their passwords only when their volumes are first created. To change one on existing
@@ -91,6 +93,8 @@ After a restore:
 
 A message that cannot be handled ends up in `<queue>.dead`. Fix the cause, then move the messages back.
 Handlers are idempotent, so this is safe. The shovel removes itself when the queue is empty.
+
+With the containerized setup, add `-f docker-compose.prod.yml --env-file .env.prod` after `docker compose`.
 
 ```bash
 docker compose exec rabbitmq rabbitmq-plugins enable rabbitmq_shovel
