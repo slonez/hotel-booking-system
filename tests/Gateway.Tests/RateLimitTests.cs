@@ -53,6 +53,16 @@ public class RateLimitTests : IClassFixture<RateLimitTests.LowLimitFactory>, ICl
     }
 
     [Fact]
+    public async Task Health_check_needs_no_login_and_is_not_rate_limited()
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            var response = await _client.GetAsync("/health");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task Behind_a_proxy_each_client_ip_has_its_own_limit()
     {
         await GetFrom(_behindProxy, "203.0.113.1");

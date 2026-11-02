@@ -10,5 +10,7 @@ ARG PROJECT
 ENV APP_DLL="$PROJECT.dll"
 WORKDIR /app
 COPY --from=build /app .
+# For the health check in compose.
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 USER $APP_UID
 ENTRYPOINT ["sh", "-c", "exec dotnet \"$APP_DLL\""]

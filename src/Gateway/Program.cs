@@ -24,6 +24,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.MapInboundClaims = false;
     });
 builder.Services.AddAuthorization();
+builder.Services.AddHealthChecks();
 
 // Turn on only when a reverse proxy is the only way to reach the Gateway: the header is then trusted
 // from any address. Otherwise clients could fake their IP and get around the rate limit.
@@ -57,6 +58,9 @@ if (useForwardedHeaders)
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Not rate limited, so monitoring keeps working. Caddy does not route this path, so it stays internal.
+app.MapHealthChecks("/health").DisableRateLimiting();
 
 app.MapGet("/api/search", async (string city, string checkIn, string checkOut,
     Bookings.BookingsClient bookings, CancellationToken ct) =>

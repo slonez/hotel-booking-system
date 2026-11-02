@@ -12,6 +12,7 @@ builder.Services.AddGrpc();
 builder.Services.AddGrpcReflection();
 builder.Services.AddDbContext<PaymentDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("PaymentDb")));
+builder.Services.AddHealthChecks().AddDbContextCheck<PaymentDbContext>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddOutboxPublisher<PaymentDbContext>();
 builder.Services.AddEventConsumer<RefundRequested, RefundRequestedHandler>(
@@ -35,6 +36,7 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", app.Environment.IsDe
 if (app.Environment.IsDevelopment())
     app.MapGrpcReflectionService();
 
+app.MapHealthChecks("/health");
 app.MapGrpcService<PaymentsService>();
 app.MapPost("/stripe/webhook", StripeWebhook.HandleAsync);
 

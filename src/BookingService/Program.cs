@@ -15,6 +15,7 @@ builder.Services.AddGrpcClient<Payments.PaymentsClient>(options =>
     options.Address = new Uri(builder.Configuration["Services:Payment"]!))
     // Calls made while handling a request inherit its deadline and cancellation.
     .EnableCallContextPropagation();
+builder.Services.AddHealthChecks().AddDbContextCheck<BookingDbContext>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HoldExpiryJob>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HoldExpiryJob>());
@@ -34,6 +35,7 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", app.Environment.IsDe
 if (app.Environment.IsDevelopment())
     app.MapGrpcReflectionService();
 
+app.MapHealthChecks("/health");
 app.MapGrpcService<BookingsService>();
 
 app.Run();

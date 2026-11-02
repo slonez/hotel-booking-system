@@ -4,6 +4,7 @@ using HotelBooking.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
 using Testcontainers.PostgreSql;
@@ -128,6 +129,19 @@ public class RecoveryTests : IAsyncLifetime
         await WaitUntil(() => _state.Handled.Contains(message.Id));
     }
 
+    [Fact]
+    public async Task Health_follows_the_connection_to_rabbitmq()
+    {
+        using var host = await StartAsync<TestHandler>();
+        await WaitForHealthAsync(host, HealthStatus.Healthy);
+
+        await _rabbitMq.StopAsync();
+        await WaitForHealthAsync(host, HealthStatus.Unhealthy);
+
+        await _rabbitMq.StartAsync();
+        await WaitForHealthAsync(host, HealthStatus.Healthy);
+    }
+
     // The manual procedure documented in the README.
     [Fact]
     public async Task Dead_letter_moved_back_with_a_shovel_is_handled()
@@ -154,6 +168,17 @@ public class RecoveryTests : IAsyncLifetime
         {
             Assert.True(DateTime.UtcNow < deadline, "Shovel was not removed within 30 seconds.");
             await Task.Delay(200);
+        }
+    }
+
+    private static async Task WaitForHealthAsync(IHost host, HealthStatus expected)
+    {
+        var health = host.Services.GetRequiredService<HealthCheckService>();
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while ((await health.CheckHealthAsync()).Status != expected)
+        {
+            Assert.True(DateTime.UtcNow < deadline, $"Health did not become {expected} within 60 seconds.");
+            await Task.Delay(100);
         }
     }
 

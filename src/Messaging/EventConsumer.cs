@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
@@ -21,7 +22,7 @@ public class EventConsumer<TEvent, THandler>(
     string routingKey,
     IServiceScopeFactory scopes,
     IConfiguration config,
-    ILogger<EventConsumer<TEvent, THandler>> logger) : BackgroundService
+    ILogger<EventConsumer<TEvent, THandler>> logger) : BackgroundService, IHealthCheck
     where THandler : IEventHandler<TEvent>
 {
     private readonly TimeSpan _retryDelay = config.GetValue("Messaging:RetryDelay", TimeSpan.FromSeconds(5));
@@ -43,6 +44,12 @@ public class EventConsumer<TEvent, THandler>(
         consumer.ReceivedAsync += (_, delivery) => HandleDeliveryAsync(channel, delivery, stoppingToken);
         await channel.BasicConsumeAsync(queue, autoAck: false, consumer, stoppingToken);
     }
+
+    // Unhealthy until connected and during a RabbitMQ outage.
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default) =>
+        Task.FromResult(_channel is { IsOpen: true }
+            ? HealthCheckResult.Healthy()
+            : HealthCheckResult.Unhealthy($"Not connected to RabbitMQ for queue {queue}."));
 
     private async Task HandleDeliveryAsync(IChannel channel, BasicDeliverEventArgs delivery, CancellationToken ct)
     {

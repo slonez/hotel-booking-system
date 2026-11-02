@@ -12,7 +12,20 @@ x-service: &service
     rabbitmq:
       condition: service_healthy
 
+x-health: &health
+  interval: 5s
+  timeout: 3s
+  retries: 5
+  start_period: 30s
+
+x-logging: &logging
+  Logging__Console__FormatterName: json
+  Logging__Console__FormatterOptions__IncludeScopes: "true"
+  Logging__Console__FormatterOptions__UseUtcTimestamp: "true"
+  Logging__Console__FormatterOptions__TimestampFormat: "yyyy-MM-ddTHH:mm:ss.fffZ"
+
 x-production: &production
+  <<: *logging
   ASPNETCORE_ENVIRONMENT: Production
   Database__MigrateOnStartup: "true"
   ConnectionStrings__RabbitMq: amqp://guest:guest@rabbitmq:5672
@@ -26,8 +39,10 @@ services:
         CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:?}
     restart: unless-stopped
     depends_on:
-      - gateway
-      - payment
+      gateway:
+        condition: service_healthy
+      payment:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
@@ -42,7 +57,11 @@ services:
       args:
         PROJECT: Gateway
     restart: unless-stopped
+    healthcheck:
+      <<: *health
+      test: ["CMD", "curl", "-fsS", "http://localhost:5172/health"]
     environment:
+      <<: *logging
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: "5172"
       Services__Booking: http://booking:5232
@@ -56,9 +75,13 @@ services:
       dockerfile: docker/service.Dockerfile
       args:
         PROJECT: BookingService
+    healthcheck:
+      <<: *health
+      test: ["CMD", "curl", "-fsS", "http://localhost:5233/health"]
     environment:
       <<: *production
-      ASPNETCORE_HTTP_PORTS: "5232"
+      Kestrel__Endpoints__Grpc__Url: http://+:5232
+      Kestrel__Endpoints__Http__Url: http://+:5233
       ConnectionStrings__BookingDb: Host=postgres;Database=booking;Username=booking;Password=booking
       Services__Payment: http://payment:5242
 
@@ -69,6 +92,9 @@ services:
       dockerfile: docker/service.Dockerfile
       args:
         PROJECT: PaymentService
+    healthcheck:
+      <<: *health
+      test: ["CMD", "curl", "-fsS", "http://localhost:5243/health"]
     environment:
       <<: *production
       Kestrel__Endpoints__Grpc__Url: http://+:5242
@@ -86,6 +112,9 @@ services:
       dockerfile: docker/service.Dockerfile
       args:
         PROJECT: NotificationService
+    healthcheck:
+      <<: *health
+      test: ["CMD", "curl", "-fsS", "http://localhost:5252/health"]
     environment:
       <<: *production
       Kestrel__Endpoints__Http__Url: http://+:5252
