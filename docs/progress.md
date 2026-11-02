@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 6 — Asynchronous Messaging and Reliability (complete)
+Phase 7 — Production Readiness
 
 ## Next step
 
-Phase 7: production readiness.
+Phase 7 step 2: containers and Caddy, whole system with one `docker compose` command.
 
 ## Confirmed decisions
 
@@ -81,6 +81,8 @@ Phase 7: production readiness.
 - Notifications (Phase 6): MailKit + Mailpit in compose. Duplicates stopped with unique `(BookingId, Type)` instead of message ID; email is sent first and then logged, so a crash can duplicate an email but not lose it.
 - Refunds: `RefundRequested` consumer only saves a Pending `Refunds` row (unique `PaymentId` stops duplicates). A separate `RefundProcessor` job calls Stripe.
 - Background loops and consumers treat an exception as shutdown only when their own token is cancelled, so a timeout is logged and retried.
+- Phase 7 runs locally, without a VPS: little new to learn compared to its cost. Caddy with a local certificate, Mailpit for email, `stripe listen` for webhooks. JSON console logs (built in), `prometheus-net`, migrations at startup behind a setting.
+- CI: GitHub Actions runs backend tests and frontend lint and build on pushes and pull requests.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
 
@@ -94,7 +96,8 @@ Phase 7: production readiness.
 
 - Accepted in Phase 6 review: on the very first deploy, `RefundRequested` published before Notification has declared its queue reaches Payment only, so that email is lost (mandatory passes because Payment's queue is bound). Emails from different queues can arrive out of order.
 - Phase 6 or later: the customer sees the requested refund amount, not whether the refund succeeded.
-- Phase 7: alert on `Failed` refunds and non-empty dead letter queues. Start Notification Service before a Booking version that publishes a new event, otherwise Booking's outbox stops at it. Real SMTP provider. Require TLS for SMTP in production. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
+- Phase 7: alert on `Failed` refunds and non-empty dead letter queues.
+- If deployed publicly later (VPS, domain, automatic deploy): start Notification Service before a Booking version that publishes a new event, otherwise Booking's outbox stops at it. Real SMTP provider with TLS required. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
 
 ## Log
 
@@ -149,3 +152,5 @@ Phase 7: production readiness.
 - 2026-11-02: Phase 6 step 3 done: Notification Service sends confirmation, cancellation and late-payment emails (tested through real RabbitMQ, PostgreSQL and Mailpit). 111 tests passing.
 - 2026-11-02: Phase 6 step 4 done: recovery tests through real RabbitMQ and PostgreSQL (crash during handling, RabbitMQ restart, start during outage, dead letter move with a shovel). Dead letter procedure in README.
 - 2026-11-02: Phase 6 reviewed, remaining items accepted under "Later". 116 tests passing. Phase 6 complete.
+- 2026-11-02: Phase 7 started.
+- 2026-11-02: Phase 7 scope changed: no VPS for now. Step 1: CI workflow added.

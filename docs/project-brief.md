@@ -281,10 +281,10 @@ Deliverable: Reliable asynchronous workflows and automated failure tests.
 - Add monitoring and relevant alerts.
 - Manage configuration and secrets securely.
 - Handle database migrations and backups.
-- Deploy the system to a Linux VPS.
-- Document deployment and recovery procedures.
+- Run the whole system in containers locally, in a production-like setup.
+- Document recovery and startup procedures. VPS deployment is deferred.
 
-Deliverable: A deployed, observable, production-like system using test payments.
+Deliverable: An observable, production-like system running locally with test payments.
 
 ### Phase 8 — Architecture Review
 
