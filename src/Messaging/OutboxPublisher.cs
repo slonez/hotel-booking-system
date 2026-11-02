@@ -32,7 +32,7 @@ public class OutboxPublisher<TContext>(
             {
                 await PublishPendingAsync(stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
                 // RabbitMQ or the database is down. Unpublished messages stay in the table for the next tick.
                 logger.LogError(ex, "Publishing outbox messages failed");
@@ -64,8 +64,9 @@ public class OutboxPublisher<TContext>(
                 // Survives a RabbitMQ restart.
                 DeliveryMode = DeliveryModes.Persistent
             };
-            // Returns when RabbitMQ confirms the message; throws if it rejects it.
-            await channel.BasicPublishAsync(Exchanges.Events, message.Type, mandatory: false,
+            // Returns when RabbitMQ confirms the message. Throws if it rejects the message or no queue is
+            // bound yet (mandatory), so the message stays in the outbox instead of being dropped.
+            await channel.BasicPublishAsync(Exchanges.Events, message.Type, mandatory: true,
                 properties, Encoding.UTF8.GetBytes(message.Payload), ct);
 
             // Saved one by one, so a crash re-sends at most one message.

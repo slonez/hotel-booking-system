@@ -19,7 +19,7 @@ public class HoldExpiryJob(IServiceScopeFactory scopes, TimeProvider time, ILogg
             {
                 await ExpireHoldsAsync(stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
                 // An exception here would stop the whole service. Log and retry on the next tick.
                 logger.LogError(ex, "Failed to expire holds");

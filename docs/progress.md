@@ -6,7 +6,7 @@ Phase 5 — Payment Integration
 
 ## Next step
 
-Phase 5 review: walk through payment flow and failure scenarios from the project brief, decide what to improve before Phase 6.
+Phase 6: asynchronous messaging and reliability. Notification Service, `BookingConfirmed`, retry limit and dead letter queue.
 
 ## Confirmed decisions
 
@@ -44,7 +44,7 @@ Phase 5 review: walk through payment flow and failure scenarios from the project
   - Booking: state-based, option B (`PaymentSucceeded` moves Held or Expired → Confirmed if a room is free; already Confirmed → ignore). Check + update must be atomic.
   - Notification: log of sent notifications (by message ID).
   - Payment (Stripe webhooks): state-based, `Pending` → `Succeeded`/`Expired` only (no processed-events table; decided in Phase 5).
-- Booking states: Held, Confirmed, Expired, Cancelled (see `docs/data-and-api-design.md`). Late payment without room keeps `Expired`.
+- Booking states: Held, Confirmed, Expired, Cancelled (see `docs/data-and-api-design.md`). Late payment without room stays `Expired` with `RefundAmountCents` set, which also marks duplicate messages.
 - Booking schema: Hotels, RoomTypes (TotalRooms), Bookings (TotalPrice, ExpiresAt).
 - Double booking prevented with `SELECT ... FOR UPDATE` on the room type row. `ExpiresAt` is the source of truth for hold expiry.
 - Payment states: Pending, Succeeded, Expired. Refund states: Pending, Succeeded, Failed (manual).
@@ -74,9 +74,10 @@ Phase 5 review: walk through payment flow and failure scenarios from the project
 - Frontend: after booking, redirects to Stripe Checkout. Held bookings have a Pay button. Stripe returns to `/?payment=success|cancelled`; booking stays Held until the webhook flow (steps 2–3).
 - Stripe webhook: `POST /stripe/webhook` on a separate HTTP/1.1 port (5243); gRPC stays HTTP/2 on 5242. Signature checked with `EventUtility.ConstructEvent`; secret in user secrets. Local testing with `stripe listen`.
 - Messaging: `RabbitMQ.Client` 7 + own small outbox (not MassTransit), to see how at-least-once works. RabbitMQ 4 in Docker Compose.
-- Outbox (Payment): `OutboxMessages` saved in the webhook transaction only when the payment actually changed to Succeeded. `OutboxPublisher` publishes every second with publisher confirms, marks each message after its confirm.
-- Booking consumer: `PaymentSucceededConsumer` (RabbitMQ, durable queue `booking.payment-succeeded`, prefetch 1, ack after handling, requeue after 5 s on error) + `PaymentSucceededHandler` (logic, tested directly). Late payment re-checks availability under the room type lock.
-- Refunds: `RefundRequested` consumer only saves a Pending `Refunds` row (unique `PaymentId` stops duplicates, also from repeated late-payment messages where booking state does not change). A separate `RefundProcessor` job calls Stripe.
+- Outbox (Payment): `OutboxMessages` saved in the webhook transaction only when the payment actually changed to Succeeded. `OutboxPublisher` publishes every second as mandatory with publisher confirms, marks each message after its confirm. Without a bound queue the message stays in the outbox.
+- Booking consumer: `EventConsumer<PaymentSucceeded, PaymentSucceededHandler>` (RabbitMQ, durable queue `booking.payment-succeeded`, prefetch 1, ack after handling, requeue after 5 s on error). Handler logic is tested directly. Late payment re-checks availability under the room type lock, using the time read after the lock.
+- Refunds: `RefundRequested` consumer only saves a Pending `Refunds` row (unique `PaymentId` stops duplicates). A separate `RefundProcessor` job calls Stripe.
+- Background loops and consumers treat an exception as shutdown only when their own token is cancelled, so a timeout is logged and retried.
 - Collaboration style: Claude recommends, user decides; fewer exercises, more building (project brief updated).
 - Authentication with Clerk (hosted, ADR-002). Services store only the Clerk user ID. Gateway validates JWT; ownership checks (NFR-6) happen in services.
 
@@ -86,9 +87,11 @@ Phase 5 review: walk through payment flow and failure scenarios from the project
 
 - None.
 
-### Later (Phase 3/5)
+### Later
 
-- Payment can succeed right before hold expiry while the webhook arrives after it. Late payment handling (FR-12) covers this.
+- Phase 6: a malformed message blocks its queue until a dead letter queue exists. Customers get no notice of a late-payment refund until Notification Service exists.
+- Phase 6 or later: the customer sees the requested refund amount, not whether the refund succeeded.
+- Phase 7: alert on `Failed` refunds. Pin the production webhook endpoint's API version to the SDK's, otherwise events are rejected.
 
 ## Log
 
@@ -136,3 +139,4 @@ Phase 5 review: walk through payment flow and failure scenarios from the project
 - 2026-10-31: Phase 5 step 4a done: outbox publisher and consumer moved to `src/Messaging`; no behavior or schema change. 86 tests passing.
 - 2026-10-31: Phase 5 step 4b done: Booking outbox; cancellation and late payment without room publish `RefundRequested` (reason `Cancelled`/`LatePayment`). 86 tests passing.
 - 2026-10-31: Phase 5 step 4c done: Payment consumes `RefundRequested` into `Refunds`, `RefundProcessor` refunds through Stripe (idempotency key = refund ID, 5 attempts → Failed); webhook stores `StripePaymentIntentId`. 93 tests passing.
+- 2026-11-01: Phase 5 review fixes: duplicate message cannot confirm a refunded booking, hold expiry checked after the lock (overbooking race), mandatory publishing, timeouts no longer stop background work, webhook signature header → 400, refund wording. 98 tests passing. Phase 5 complete.

@@ -22,7 +22,7 @@ public class RefundProcessor(IServiceScopeFactory scopes, RefundService stripeRe
             {
                 await ProcessPendingAsync(stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "Processing refunds failed");
             }

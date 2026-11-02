@@ -14,7 +14,6 @@ public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILo
 
     public async Task HandleAsync(PaymentSucceeded message, CancellationToken ct)
     {
-        var now = time.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
         var booking = await db.Bookings.AsNoTracking()
@@ -25,9 +24,9 @@ public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILo
             logger.LogWarning("Payment {PaymentId} succeeded for unknown booking {BookingId}", message.PaymentId, message.BookingId);
             return;
         }
-        if (booking.Status is not (BookingStatus.Held or BookingStatus.Expired))
+        if (booking.Status is not (BookingStatus.Held or BookingStatus.Expired) || booking.RefundAmountCents is not null)
         {
-            // Already confirmed: a duplicate message.
+            // Already confirmed or refunded: a duplicate message.
             logger.LogInformation("Booking {BookingId} is {Status}; ignoring payment {PaymentId}",
                 booking.Id, booking.Status, message.PaymentId);
             return;
@@ -38,6 +37,8 @@ public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILo
             .FromSql($"""SELECT * FROM "RoomTypes" WHERE "Id" = {booking.RoomTypeId} FOR UPDATE""")
             .SingleAsync(ct);
 
+        // Read after the lock: while waiting for it, the hold may have expired and another booking taken the room.
+        var now = time.GetUtcNow();
         var holdIsValid = booking.Status == BookingStatus.Held && booking.ExpiresAt > now;
         if (!holdIsValid)
         {
@@ -49,13 +50,22 @@ public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILo
                 .ToListAsync(ct);
             if (Availability.MaxRoomsTaken(others, booking.CheckInDate, booking.CheckOutDate) >= roomType.TotalRooms)
             {
-                // The booking stays Expired and the customer gets the full payment back. A duplicate message
-                // publishes the event again; Payment Service refunds a payment only once (unique PaymentId).
-                logger.LogWarning("Late payment {PaymentId} for booking {BookingId}, but no room is left; refunding",
-                    message.PaymentId, booking.Id);
-                db.OutboxMessages.Add(OutboxMessage.Create(RefundRequested.RoutingKey,
-                    BookingsService.RefundRequestedFor(booking, message.AmountCents, RefundReason.LatePayment), now));
-                await db.SaveChangesAsync(ct);
+                // The customer gets the full payment back. RefundAmountCents marks this, so a duplicate
+                // message cannot confirm the booking later, when a room may have become free.
+                var marked = await db.Bookings
+                    .Where(b => b.Id == booking.Id && b.RefundAmountCents == null
+                        && (b.Status == BookingStatus.Held || b.Status == BookingStatus.Expired))
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(b => b.Status, BookingStatus.Expired)
+                        .SetProperty(b => b.RefundAmountCents, message.AmountCents), ct);
+                if (marked > 0)
+                {
+                    logger.LogWarning("Late payment {PaymentId} for booking {BookingId}, but no room is left; refunding",
+                        message.PaymentId, booking.Id);
+                    db.OutboxMessages.Add(OutboxMessage.Create(RefundRequested.RoutingKey,
+                        BookingsService.RefundRequestedFor(booking, message.AmountCents, RefundReason.LatePayment), now));
+                    await db.SaveChangesAsync(ct);
+                }
                 await transaction.CommitAsync(ct);
                 return;
             }
@@ -63,7 +73,8 @@ public class PaymentSucceededHandler(BookingDbContext db, TimeProvider time, ILo
 
         // Atomic: the status condition protects against a concurrent duplicate message.
         await db.Bookings
-            .Where(b => b.Id == booking.Id && (b.Status == BookingStatus.Held || b.Status == BookingStatus.Expired))
+            .Where(b => b.Id == booking.Id && b.RefundAmountCents == null
+                && (b.Status == BookingStatus.Held || b.Status == BookingStatus.Expired))
             .ExecuteUpdateAsync(s => s.SetProperty(b => b.Status, BookingStatus.Confirmed), ct);
         await transaction.CommitAsync(ct);
 

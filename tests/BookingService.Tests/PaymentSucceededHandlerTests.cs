@@ -11,6 +11,9 @@ public class PaymentSucceededHandlerTests(BookingServiceFactory factory) : IAsyn
 {
     private const int SeasideSuite = 4;
 
+    // Resolving the services starts the service, which applies migrations and seed data.
+    private readonly IServiceProvider _services = factory.Services;
+
     public Task InitializeAsync() => factory.DeleteBookingsAsync();
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -44,6 +47,47 @@ public class PaymentSucceededHandlerTests(BookingServiceFactory factory) : IAsyn
         Assert.Equal(BookingStatus.Expired, await GetStatus(late));
         Assert.Equal(new RefundRequested(late.Id, "user_late@example.com", "Seaside Hotel", "Suite", late.TotalPriceCents, RefundReason.LatePayment),
             await factory.SingleOutboxMessageAsync<RefundRequested>(RefundRequested.RoutingKey));
+        await using var db = factory.CreateDbContext();
+        Assert.Equal(late.TotalPriceCents, await db.Bookings.Where(b => b.Id == late.Id).Select(b => b.RefundAmountCents).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Duplicate_message_does_not_confirm_a_refunded_booking_after_a_room_becomes_free()
+    {
+        var late = factory.NewBooking(BookingStatus.Expired, roomTypeId: SeasideSuite, userId: "user_late", expiresIn: TimeSpan.FromMinutes(-1));
+        var other = factory.NewBooking(BookingStatus.Confirmed, roomTypeId: SeasideSuite, userId: "user_other");
+        await factory.AddBookingsAsync(late, other);
+        await Handle(late);
+        await using (var db = factory.CreateDbContext())
+            await db.Bookings.Where(b => b.Id == other.Id).ExecuteUpdateAsync(s => s.SetProperty(b => b.Status, BookingStatus.Cancelled));
+
+        await Handle(late);
+
+        Assert.Equal(BookingStatus.Expired, await GetStatus(late));
+        Assert.Equal(1, await factory.CountOutboxMessagesAsync());
+    }
+
+    [Fact]
+    public async Task Hold_that_expires_while_waiting_for_the_lock_does_not_overbook()
+    {
+        var hold = factory.NewBooking(BookingStatus.Held, roomTypeId: SeasideSuite, userId: "user_hold", expiresIn: TimeSpan.FromMinutes(1));
+        await factory.AddBookingsAsync(hold);
+
+        // Plays the part of CreateBooking: holds the room type lock while the hold expires, then takes the room.
+        await using var db = factory.CreateDbContext();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.RoomTypes.FromSql($"""SELECT * FROM "RoomTypes" WHERE "Id" = {SeasideSuite} FOR UPDATE""").SingleAsync();
+
+        var handling = Handle(hold);
+        await WaitUntilAQueryIsWaitingForALock(db);
+        factory.Time.Advance(TimeSpan.FromMinutes(2));
+        db.Bookings.Add(factory.NewBooking(BookingStatus.Confirmed, roomTypeId: SeasideSuite, userId: "user_new"));
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        await handling;
+
+        Assert.Equal(BookingStatus.Expired, await GetStatus(hold));
+        Assert.Equal(1, await factory.CountOutboxMessagesAsync());
     }
 
     [Theory]
@@ -65,9 +109,21 @@ public class PaymentSucceededHandlerTests(BookingServiceFactory factory) : IAsyn
         await Handle(factory.NewBooking(BookingStatus.Held));
     }
 
+    private static async Task WaitUntilAQueryIsWaitingForALock(BookingDbContext db)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (await db.Database
+            .SqlQuery<int>($"""SELECT count(*)::int AS "Value" FROM pg_stat_activity WHERE wait_event_type = 'Lock'""")
+            .SingleAsync() == 0)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "No query started waiting for the lock within 10 seconds.");
+            await Task.Delay(50);
+        }
+    }
+
     private async Task Handle(Booking booking)
     {
-        await using var scope = factory.Services.CreateAsyncScope();
+        await using var scope = _services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<PaymentSucceededHandler>()
             .HandleAsync(new PaymentSucceeded(booking.Id, Guid.CreateVersion7(), booking.TotalPriceCents), CancellationToken.None);
     }

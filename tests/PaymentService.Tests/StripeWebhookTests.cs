@@ -107,6 +107,24 @@ public class StripeWebhookTests(PaymentServiceFactory factory) : IAsyncLifetime
         Assert.Equal(PaymentStatus.Pending, await GetStatus());
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("not-a-signature")]
+    public async Task Rejects_event_with_missing_or_malformed_signature_header(string? header)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/stripe/webhook")
+        {
+            Content = new StringContent(EventJson(EventTypes.CheckoutSessionCompleted, SessionId, "paid"), Encoding.UTF8, "application/json")
+        };
+        if (header is not null)
+            request.Headers.Add("Stripe-Signature", header);
+
+        var response = await _http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(PaymentStatus.Pending, await GetStatus());
+    }
+
     [Fact]
     public async Task Acknowledges_event_for_unknown_session()
     {

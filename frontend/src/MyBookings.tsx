@@ -34,7 +34,7 @@ export default function MyBookings({ bookings, onPay, onCancel }: Props) {
             <td>
               {b.status}
               {b.status === 'Held' && ` until ${new Date(b.expiresAt).toLocaleTimeString('fi-FI')}`}
-              {b.refundAmountCents !== null && `, refund ${euros(b.refundAmountCents)}`}
+              {b.refundAmountCents !== null && `, refund of ${euros(b.refundAmountCents)} requested`}
             </td>
             <td>
               {b.status === 'Held' && <button onClick={() => onPay(b.bookingId)}>Pay</button>}

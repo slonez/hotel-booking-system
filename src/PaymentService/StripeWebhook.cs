@@ -21,14 +21,18 @@ public static class StripeWebhook
         // The signature covers the exact bytes Stripe sent, so read the raw body.
         var json = await new StreamReader(request.Body).ReadToEndAsync(ct);
 
+        if (!request.Headers.TryGetValue("Stripe-Signature", out var signature))
+            return Results.BadRequest();
+
         Event stripeEvent;
         try
         {
-            stripeEvent = EventUtility.ConstructEvent(json, request.Headers["Stripe-Signature"], config["Stripe:WebhookSecret"]);
+            stripeEvent = EventUtility.ConstructEvent(json, signature, config["Stripe:WebhookSecret"]);
         }
         catch (StripeException ex)
         {
-            logger.LogWarning(ex, "Rejected Stripe webhook with invalid signature");
+            // Invalid signature, or an event API version that does not match the SDK.
+            logger.LogWarning(ex, "Rejected Stripe webhook");
             return Results.BadRequest();
         }
 

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentService.Data;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
 
 namespace PaymentService.Tests;
 
@@ -59,6 +60,28 @@ public class OutboxPublisherTests(PaymentServiceFactory factory) : IAsyncLifetim
 
         await using var check = factory.CreateDbContext();
         Assert.Equal(factory.Time.GetUtcNow(), (await check.OutboxMessages.SingleAsync()).PublishedAt);
+    }
+
+    [Fact]
+    public async Task Message_stays_in_the_outbox_until_a_queue_is_bound()
+    {
+        const string routingKey = "test.no-queue-yet";
+        await using (var db = factory.CreateDbContext())
+        {
+            db.OutboxMessages.Add(OutboxMessage.Create(routingKey,
+                new PaymentSucceeded(Guid.CreateVersion7(), Guid.CreateVersion7(), 25800), factory.Time.GetUtcNow()));
+            await db.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsAsync<PublishReturnException>(() => _publisher.PublishPendingAsync(CancellationToken.None));
+        await using (var db = factory.CreateDbContext())
+            Assert.Null((await db.OutboxMessages.SingleAsync()).PublishedAt);
+
+        await _channel.QueueBindAsync(TestQueue, Exchanges.Events, routingKey);
+        var published = await _publisher.PublishPendingAsync(CancellationToken.None);
+
+        Assert.Equal(1, published);
+        Assert.Equal(1u, await _channel.MessageCountAsync(TestQueue));
     }
 
     [Fact]

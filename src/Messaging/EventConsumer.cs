@@ -54,7 +54,7 @@ public class EventConsumer<TEvent, THandler>(
             await scope.ServiceProvider.GetRequiredService<THandler>().HandleAsync(message, ct);
             await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             // E.g. the database is down. Wait and put the message back for another try.
             // Phase 6 adds a retry limit and a dead letter queue for messages that never succeed.
@@ -78,7 +78,7 @@ public class EventConsumer<TEvent, THandler>(
                 _channel = await _connection.CreateChannelAsync(cancellationToken: ct);
                 return _channel;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "Cannot connect to RabbitMQ; retrying in {Delay}", RetryDelay);
                 await Task.Delay(RetryDelay, ct);
