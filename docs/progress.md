@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 7 — Production Readiness (complete)
+Phase 8 — Architecture Review
 
 ## Next step
 
-Phase 8: architecture review.
+Write the learning retrospective in `docs/architecture-review.md`.
 
 ## Confirmed decisions
 
@@ -79,6 +79,7 @@ Phase 8: architecture review.
 - Consumer errors: quorum queues with a dead letter queue `<queue>.dead`. `EventConsumer` makes 20 attempts 5 s apart (about 100 s) while holding the message, then dead letters it; malformed messages go there at once. Own counting because `x-delivery-limit` does not count nacks with requeue. Dead letters are moved back by hand.
 - Notification Service: web host without endpoints on port 5252 (same setup and test factory as other services; health checks in Phase 7), `notification` database. Log rows hold no customer data.
 - Notifications (Phase 6): MailKit + Mailpit in compose. Duplicates stopped with unique `(BookingId, Type)` instead of message ID; email is sent first and then logged, so a crash can duplicate an email but not lose it.
+- Reconciliation: `PaymentReconciliationJob` in Payment asks Stripe about `Pending` payments over 10 minutes old, every 5 minutes, through the same `PaymentOutcome` code as webhooks. Fixes payments itself and raises `WebhooksMissed`.
 - Refunds: `RefundRequested` consumer only saves a Pending `Refunds` row (unique `PaymentId` stops duplicates). A separate `RefundProcessor` job calls Stripe.
 - Background loops and consumers treat an exception as shutdown only when their own token is cancelled, so a timeout is logged and retried.
 - Phase 7 runs locally, without a VPS: little new to learn compared to its cost. Caddy with a local certificate, Mailpit for email, `stripe listen` for webhooks. JSON console logs (built in), `prometheus-net`, migrations at startup behind a setting.
@@ -101,6 +102,7 @@ Phase 8: architecture review.
 
 ### Later
 
+- Knowingly left undone in Phase 8 (see `docs/architecture-review.md`): visible refund failures, service-to-service trust, slow failure when Booking is down, `azp` check, email retention.
 - `ServiceUnhealthy`, `OutboxStuck`, `RefundFailed` and `GatewayErrors` are tested with `promtool` and metric tests, but not fired in containers. `stripe events resend` in `docs/operations.md` is untried.
 - No alert when a backup fails: only the container log shows it. Backups stay on the same machine.
 - Trace IDs do not follow messages through RabbitMQ; logs of one flow connect through `BookingId` and `MessageId`.
@@ -170,3 +172,5 @@ Phase 8: architecture review.
 - 2026-11-02: Phase 7 step 5 done: passwords from `.env.prod`, daily backups, restore script tested in containers.
 - 2026-11-02: Phase 7 step 6 done: `docs/operations.md` for startup, alerts and recovery; its commands tried in containers.
 - 2026-11-02: Phase 7 reviewed, remaining items accepted under "Later". Phase 7 complete.
+- 2026-11-04: Phase 8 started. Draft `docs/architecture-review.md`: NFR-5 measured for the first time (p95 11 ms at 50 requests/s), failure isolation measured.
+- 2026-11-04: Stripe reconciliation done: lost webhooks no longer leave a paid booking unconfirmed. Other review improvements knowingly left undone.

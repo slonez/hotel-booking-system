@@ -41,6 +41,14 @@ groups:
         annotations:
           summary: "{{ $value }} refunds need manual handling"
 
+      - alert: WebhooksMissed
+        expr: increase(hotel_payments_reconciled_total[1h]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Reconciliation fixed payments whose Stripe webhook never arrived"
+          description: "Bookings were confirmed late. Check that webhooks reach Payment Service."
+
       # Filters out monitoring instead of matching /api: the exception handler clears the route,
       # so requests that end in an error have an empty endpoint label.
       - alert: GatewayErrors

@@ -107,6 +107,23 @@ tests:
           - exp_labels: { alertname: GatewayErrors, severity: warning }
             exp_annotations: { summary: "Over 5 % of API requests fail" }
 
+  - name: Reconciliation alerts when it fixes a payment, not when it runs quietly
+    interval: 5m
+    input_series:
+      - series: 'hotel_payments_reconciled_total{job="payment"}'
+        values: '0 0 0 1 1'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: WebhooksMissed
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: WebhooksMissed
+        exp_alerts:
+          - exp_labels: { alertname: WebhooksMissed, severity: warning, job: payment }
+            exp_annotations:
+              summary: "Reconciliation fixed payments whose Stripe webhook never arrived"
+              description: "Bookings were confirmed late. Check that webhooks reach Payment Service."
+
   - name: A low error rate does not alert
     interval: 1m
     input_series:

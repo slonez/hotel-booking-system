@@ -1,6 +1,3 @@
-using HotelBooking.Contracts.Events;
-using HotelBooking.Messaging;
-using Microsoft.EntityFrameworkCore;
 using PaymentService.Data;
 using Stripe;
 using Stripe.Checkout;
@@ -50,32 +47,9 @@ public static class StripeWebhook
         if (newStatus is null)
             return Results.Ok();
 
-        // The status change and the event are saved together: either both or neither (transactional outbox).
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-
-        // Idempotent: only a Pending payment changes, so duplicate or late events do nothing.
-        var updated = await db.Payments
-            .Where(p => p.StripeSessionId == session.Id && p.Status == PaymentStatus.Pending)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(p => p.Status, newStatus.Value)
-                .SetProperty(p => p.StripePaymentIntentId, session.PaymentIntentId), ct);
-
-        if (updated == 0)
-        {
+        if (!await PaymentOutcome.ApplyAsync(db, session, newStatus.Value, time, ct))
             logger.LogInformation("Stripe event {EventId} ({Type}) changed nothing for session {SessionId}",
                 stripeEvent.Id, stripeEvent.Type, session.Id);
-            return Results.Ok();
-        }
-
-        if (newStatus == PaymentStatus.Succeeded)
-        {
-            var payment = await db.Payments.SingleAsync(p => p.StripeSessionId == session.Id, ct);
-            db.OutboxMessages.Add(OutboxMessage.Create(PaymentSucceeded.RoutingKey,
-                new PaymentSucceeded(payment.BookingId, payment.Id, payment.AmountCents), time.GetUtcNow()));
-            await db.SaveChangesAsync(ct);
-        }
-
-        await transaction.CommitAsync(ct);
 
         // Stripe retries until it gets a 2xx, so answer OK also when nothing changed.
         return Results.Ok();

@@ -13,6 +13,20 @@ public class FakeSessionService : SessionService
 
     public StripeException? Error { get; set; }
 
+    // What Stripe reports for each session ID. A session listed here with no value fails with a StripeException.
+    public ConcurrentDictionary<string, Session?> Existing { get; } = new();
+
+    public ConcurrentQueue<string> Fetched { get; } = new();
+
+    public override Task<Session> GetAsync(
+        string id, SessionGetOptions? options = null, RequestOptions? requestOptions = null, CancellationToken cancellationToken = default)
+    {
+        Fetched.Enqueue(id);
+        return Existing[id] is { } session
+            ? Task.FromResult(session)
+            : throw new StripeException("Stripe is unavailable.");
+    }
+
     public override async Task<Session> CreateAsync(
         SessionCreateOptions options, RequestOptions? requestOptions = null, CancellationToken cancellationToken = default)
     {

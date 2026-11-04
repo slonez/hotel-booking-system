@@ -79,8 +79,8 @@ COMMIT;
 | Entity | From | To | Trigger |
 |---|---|---|---|
 | Payment | — | Pending | Checkout session created |
-| Payment | Pending | Succeeded | Stripe webhook: payment completed |
-| Payment | Pending | Expired | Stripe webhook: session expired |
+| Payment | Pending | Succeeded | Stripe webhook or reconciliation: payment completed |
+| Payment | Pending | Expired | Stripe webhook or reconciliation: session expired |
 | Refund | — | Pending | `RefundRequested` event |
 | Refund | Pending | Succeeded | Stripe refund succeeded |
 | Refund | Pending | Failed | Still failing after several attempts; handled manually |
@@ -103,6 +103,7 @@ OutboxMessages
 - `BookingId` unique: one payment per booking (NFR-2). `CreateCheckoutSession` returns the saved session's URL if one exists. Concurrent calls may create extra Stripe sessions, but only the saved session's URL is ever returned, so the others expire unpaid. (A Stripe idempotency key does not work here: `expires_at` differs on every call, and Stripe rejects a reused key with different parameters.)
 - Checkout sessions expire 30 min after creation (Stripe minimum), so a session can outlive its hold. Payment after hold expiry is a late payment (FR-12).
 - Stripe webhooks are idempotent through the state change (`WHERE StripeSessionId = X AND Status = 'Pending'`), not a processed-events table: a duplicate or late event changes no row. Events: `checkout.session.completed` (when `payment_status = paid`) and `checkout.session.async_payment_succeeded` → Succeeded, `checkout.session.expired` → Expired. Others and unknown sessions → 200, ignored. Invalid signature → 400.
+- Reconciliation: `PaymentReconciliationJob` runs every 5 minutes and asks Stripe about `Pending` payments over 10 minutes old. `complete` + `paid` → Succeeded, `expired` → Expired, using the same `PaymentOutcome` code as webhooks. Each fix increments `hotel_payments_reconciled_total`, which raises `WebhooksMissed`.
 - `PaymentId` unique on refunds: a duplicate `RefundRequested` event cannot create a second refund.
 - `Refund.Id` is the Stripe idempotency key, so retries cannot refund twice in Stripe.
 - `RefundRequested` is consumed from queue `payment.refund-requested`; the handler only saves a Pending refund (ignored if the payment is not Succeeded or the amount is not within the paid amount). `RefundProcessor` (every minute) calls Stripe with the payment intent; after 5 failed attempts → Failed (manual). A refund Stripe accepts is marked Succeeded; `refund.failed` webhooks are not handled yet.

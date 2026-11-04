@@ -40,6 +40,7 @@ Dashboards: Grafana, http://localhost:3000. Firing alerts: http://localhost:9093
 | `OutboxStuck` | Events are not being published | RabbitMQ is down, or the consumer of the oldest event has never started and declared its queue. Start it. Messages then go out by themselves. |
 | `DeadLetters` | A message could not be handled | Read the consumer's log for `dead lettering`. Fix the cause, then move the messages back (README). |
 | `RefundFailed` | Stripe refused a refund 5 times | See below. |
+| `WebhooksMissed` | Reconciliation had to fix a payment | Check that webhooks reach Payment Service. Locally: is `stripe listen` running? Bookings are already corrected. |
 | `GatewayErrors` | Over 5 % of API requests fail | The Gateway's log shows the failing call. Check Booking and Payment. |
 
 A database or RabbitMQ outage over about 100 seconds moves messages to the dead letter queues, so `DeadLetters` often
@@ -67,11 +68,12 @@ with the saved failure.
 
 ## Customer paid, booking stays Held
 
-The webhook did not arrive: the payment is `Pending` in Payment Service and has no `payment.succeeded` in the outbox.
+The webhook has not arrived: the payment is `Pending` in Payment Service. Locally the usual cause is that `stripe listen`
+is not running.
 
-- Locally the usual cause is that `stripe listen` is not running. It does not deliver events from when it was down.
-- `stripe events resend <event id>` should deliver one again. This has not been tried in this project.
-- Otherwise refund the payment in the Stripe dashboard. Its hold expires by itself.
+Wait. `PaymentReconciliationJob` asks Stripe about payments that are over 10 minutes old, every 5 minutes, and treats the
+answer like a webhook. The booking is confirmed about 15 minutes after the payment at the latest, or refunded if
+no room is left. If it does not happen, look for `Could not check payment` in Payment's log.
 
 ## Full recovery
 

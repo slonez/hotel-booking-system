@@ -20,6 +20,8 @@ builder.Services.AddEventConsumer<RefundRequested, RefundRequestedHandler>(
     RefundRequestedHandler.Queue, RefundRequested.RoutingKey);
 builder.Services.AddSingleton<RefundProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RefundProcessor>());
+builder.Services.AddSingleton<PaymentReconciliationJob>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PaymentReconciliationJob>());
 // The secret key comes from user secrets in development, never from appsettings.
 builder.Services.AddSingleton<IStripeClient>(_ => new StripeClient(builder.Configuration["Stripe:SecretKey"]));
 builder.Services.AddSingleton(sp => new SessionService(sp.GetRequiredService<IStripeClient>()));
