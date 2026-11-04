@@ -1,6 +1,6 @@
 # Architecture review
 
-Status: draft for discussion, 2026-11-04. The learning retrospective is written last, after the review.
+Status: reviewed, 2026-11-04.
 
 ## Verdict
 
@@ -169,4 +169,25 @@ booking was never confirmed and nothing noticed. `PaymentReconciliationJob` now 
 
 ## Learning retrospective
 
-To be written together.
+### Most valuable
+
+- Understanding how a microservice architecture works in practice, and how services communicate through gRPC. All earlier
+  work experience was with monoliths, so this was the largest new area.
+- Learning how Stripe works, which had been a goal for a long time.
+
+### What was hard
+
+How RabbitMQ messages actually move, and at which point. This became confusing during the project. The architecture
+walkthrough page, which shows messages moving through the queues, made it clearer.
+
+### What to study next
+
+Suggestions, starting from the part that stayed least clear:
+
+1. **Message flow, hands on.** Follow one message in the RabbitMQ UI: stop a consumer, watch it wait in the queue, make the
+   handler fail, watch it reach the dead letter queue, then move it back. `docs/operations.md` has the commands.
+2. **The transactional outbox and at-least-once delivery from memory.** Explain why each step exists and what breaks without it.
+   Explaining this clearly is a good test of understanding, and it comes up in senior interviews.
+3. **Comparing this with a modular monolith in code.** Build the payment flow as one transaction with module boundaries, and
+   compare how much of the reliability code disappears. It connects the new experience to familiar monoliths.
+4. **A public deployment**, if a demo is wanted later. The list is at the end of `docs/operations.md`.

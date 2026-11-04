@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 8 — Architecture Review
+Phase 8 — Architecture Review (complete). All phases complete.
 
 ## Next step
 
-Write the learning retrospective in `docs/architecture-review.md`.
+None. Study suggestions are at the end of `docs/architecture-review.md`.
 
 ## Confirmed decisions
 
@@ -174,3 +174,4 @@ Write the learning retrospective in `docs/architecture-review.md`.
 - 2026-11-02: Phase 7 reviewed, remaining items accepted under "Later". Phase 7 complete.
 - 2026-11-04: Phase 8 started. Draft `docs/architecture-review.md`: NFR-5 measured for the first time (p95 11 ms at 50 requests/s), failure isolation measured.
 - 2026-11-04: Stripe reconciliation done: lost webhooks no longer leave a paid booking unconfirmed. Other review improvements knowingly left undone.
+- 2026-11-04: Learning retrospective written. Phase 8 complete. All phases complete.
